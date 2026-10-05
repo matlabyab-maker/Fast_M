@@ -29,3 +29,9 @@
 
 ## Reference-image remote UI
 The controller screen now displays the two supplied reference images as full-screen backgrounds. Transparent hit areas are placed over the pictured controls; Menu 1/Menu 2 switch between the two layouts. Page Up/Down send scroll commands, Back sends the Android Back command, Left Click sends a click, and Drag sends relative pointer movement. The Copy/Past and Point Zoom regions are visual hit areas only in this build because their receiver-side functions were not present in the supplied command handler. The package has not been built or tested on physical phones.
+
+
+## اصلاح اتصال کنترلر و تصاویر زمینه
+- کنترلر اکنون پیش از نمایش منو IP گوشی هدف را می‌پرسد و اتصال TCP به درگاه 47821 را برقرار می‌کند؛ قبلاً showController مستقیماً منو را نشان می‌داد و اصلاً connectToTarget را صدا نمی‌زد، پس دکمه‌ها فرمانی ارسال نمی‌کردند.
+- دو تصویر اصلی منو در drawable-nodpi فشرده شده‌اند: remote_menu1.jpg و remote_menu2.jpg هرکدام در محدودهٔ 50 تا 60 KB.
+- Point Zoom، Copy و Past هنوز در RemoteServerService پیاده‌سازی نشده‌اند؛ سایر فرمان‌های Back، Scroll، Left Click و Move در گیرنده وجود دارند.

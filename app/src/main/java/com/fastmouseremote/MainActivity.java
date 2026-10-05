@@ -1,6 +1,7 @@
 package com.fastmouseremote;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -94,8 +95,48 @@ public class MainActivity extends Activity {
     }
     private void showController() {
         disconnect();
-        showingMenu2 = false;
-        showRemoteImage(false);
+        final EditText ip = new EditText(this);
+        ip.setSingleLine(true);
+        ip.setHint("IP گوشی هدف، مثلاً 192.168.1.5");
+        new AlertDialog.Builder(this)
+            .setTitle("اتصال به گوشی موس")
+            .setMessage("ابتدا در گوشی مقصد «شروع پذیرش اتصال ریموت» را بزن. هر دو گوشی باید روی یک Wi-Fi یا هات‌اسپات باشند.")
+            .setView(ip)
+            .setNegativeButton("لغو", (d,w) -> showHome())
+            .setPositiveButton("اتصال", (d,w) -> connectToTarget(ip.getText().toString().trim(), () -> {
+                showingMenu2 = false;
+                showRemoteImage(false);
+                Toast.makeText(this, "اتصال برقرار شد", Toast.LENGTH_SHORT).show();
+            }))
+            .setCancelable(false)
+            .show();
+    }
+
+    private void connectToTarget(String address, Runnable onConnected) {
+        if (address == null || address.trim().isEmpty()) {
+            Toast.makeText(this, "IP گوشی هدف را وارد کن", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, "در حال اتصال…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                Socket s = new Socket();
+                s.connect(new java.net.InetSocketAddress(address.trim(), PORT), 5000);
+                PrintWriter w = new PrintWriter(s.getOutputStream(), true);
+                clientSocket = s;
+                writer = w;
+                connected = true;
+                runOnUiThread(onConnected);
+            } catch (Exception e) {
+                connected = false;
+                runOnUiThread(() -> new AlertDialog.Builder(this)
+                    .setTitle("اتصال ناموفق")
+                    .setMessage("اتصال به گوشی هدف برقرار نشد. IP، شبکهٔ مشترک، سرویس مقصد و مجوزها را بررسی کن.\n" + e.getMessage())
+                    .setPositiveButton("تلاش دوباره", (dialog, which) -> showController())
+                    .setNegativeButton("بازگشت", (dialog, which) -> showHome())
+                    .show());
+            }
+        }, "fast-m-connect").start();
     }
 
     // The uploaded reference images are used as the actual screen backgrounds.
@@ -129,7 +170,6 @@ public class MainActivity extends Activity {
                 addHit(0.184f,0.120f,0.326f,0.263f,()->send("BACK"));
                 addHit(0.00f,0.263f,0.326f,0.625f,()->send("SCROLL -1"));
                 addHit(0.00f,0.625f,0.326f,1.000f,()->send("SCROLL 1"));
-                addHit(0.326f,0.263f,0.724f,1.000f,()->{});
                 addHit(0.724f,0.263f,1.000f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.326f,0.263f,0.724f,1.000f);
             } else {
