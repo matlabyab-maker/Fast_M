@@ -127,17 +127,17 @@ public class MainActivity extends Activity {
                 addHit(0.246f,0.00f,0.326f,0.120f,()->send("PASTE"));
                 addHit(0.00f,0.120f,0.184f,0.263f,()->showRemoteImage(true));
                 addHit(0.184f,0.120f,0.326f,0.263f,()->send("BACK"));
-                addHit(0.00f,0.263f,0.326f,0.625f,()->send("PAGE_UP"));
-                addHit(0.00f,0.625f,0.326f,1.000f,()->send("PAGE_DOWN"));
+                addHit(0.00f,0.263f,0.326f,0.625f,()->send("SCROLL -1"));
+                addHit(0.00f,0.625f,0.326f,1.000f,()->send("SCROLL 1"));
                 addHit(0.326f,0.263f,0.724f,1.000f,()->{});
-                addHit(0.724f,0.263f,1.000f,1.000f,()->send("LEFT_CLICK"));
+                addHit(0.724f,0.263f,1.000f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.326f,0.263f,0.724f,1.000f);
             } else {
                 // Image 1: Page Up / Page Down, Menu 2, Left Click and Drag.
-                addHit(0.00f,0.00f,0.195f,0.315f,()->send("PAGE_UP"));
-                addHit(0.195f,0.00f,0.390f,0.315f,()->send("PAGE_DOWN"));
+                addHit(0.00f,0.00f,0.195f,0.315f,()->send("SCROLL -1"));
+                addHit(0.195f,0.00f,0.390f,0.315f,()->send("SCROLL 1"));
                 addHit(0.00f,0.315f,0.390f,0.402f,()->showRemoteImage(false));
-                addHit(0.00f,0.402f,0.390f,1.000f,()->send("LEFT_CLICK"));
+                addHit(0.00f,0.402f,0.390f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.390f,0.402f,1.000f,1.000f);
             }
         }
