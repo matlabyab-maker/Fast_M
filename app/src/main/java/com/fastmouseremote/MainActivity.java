@@ -97,7 +97,7 @@ public class MainActivity extends Activity {
         root.addView(text("۲) برای نمایش نشانگر شناور، مجوز نمایش روی برنامه‌های دیگر را فعال کن.",15),params(-1,-2,0,10,0,4));
         button("مجوز نمایش روی برنامه‌ها", () -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)));
         String ip=getLocalIp();
-        root.addView(text("آدرس این گوشی: "+ip+"\nدرگاه: "+PORT+"\nبرای اتصال، فقط IP را در گوشی ریموت وارد کن.",18),params(-1,-2,0,18,0,12));
+        root.addView(text("آدرس این گوشی: "+ip+"\nدرگاه TCP: "+PORT+"\nگوشی ریموت باید همین IP و درگاه را استفاده کند.",18),params(-1,-2,0,18,0,12));
         button("شروع پذیرش اتصال ریموت", () -> {
             Intent i=new Intent(this,RemoteServerService.class);
             try { startService(i); Toast.makeText(this,"سرویس موس شروع شد؛ صفحه را باز نگه دار تا وضعیت را بررسی کنی.",Toast.LENGTH_LONG).show(); }

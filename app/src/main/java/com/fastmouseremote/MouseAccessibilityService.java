@@ -25,23 +25,79 @@ public class MouseAccessibilityService extends AccessibilityService {
     public static volatile MouseAccessibilityService instance;
     private WindowManager wm; private View cursor; private LayoutParams lp; private final Handler handler=new Handler(Looper.getMainLooper());
     private int x=150,y=250; private int screenW=720,screenH=1280;
+    private boolean serviceAlive = false;
+    private final Runnable cursorWatchdog = new Runnable() {
+        @Override public void run() {
+            if (!serviceAlive) return;
+            ensureCursorVisible();
+            handler.postDelayed(this, 900L);
+        }
+    };
     @Override public void onServiceConnected(){
         super.onServiceConnected();
         instance=this;
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
-        android.util.DisplayMetrics dm=new android.util.DisplayMetrics();
-        wm.getDefaultDisplay().getRealMetrics(dm);
-        screenW=dm.widthPixels; screenH=dm.heightPixels;
+        if (wm == null) return;
+        refreshDisplayBounds();
         x=Math.max(1,Math.min(screenW-1,x)); y=Math.max(1,Math.min(screenH-1,y));
-        handler.post(()->{
-            if(cursor!=null) { try { if(cursor.getParent()!=null) wm.removeView(cursor); } catch(Exception ignored) {} cursor=null; lp=null; }
+        serviceAlive = true;
+        handler.post(() -> {
+            removeCursorView();
             showCursor();
+            handler.removeCallbacks(cursorWatchdog);
+            handler.postDelayed(cursorWatchdog, 900L);
         });
     }
-    private void showCursor() {
+    private void refreshDisplayBounds() {
         if (wm == null) return;
+        try {
+            android.util.DisplayMetrics dm=new android.util.DisplayMetrics();
+            wm.getDefaultDisplay().getRealMetrics(dm);
+            screenW=Math.max(1, dm.widthPixels);
+            screenH=Math.max(1, dm.heightPixels);
+        } catch (Exception ignored) { }
+    }
+
+    private void removeCursorView() {
+        View old = cursor;
+        cursor = null;
+        lp = null;
+        if (old != null && wm != null) {
+            try { if (old.getParent() != null) wm.removeViewImmediate(old); } catch (Exception ignored) { }
+        }
+    }
+
+    /** Recreate the non-touchable accessibility overlay if Android detaches or hides it. */
+    private void ensureCursorVisible() {
+        if (!serviceAlive || wm == null) return;
+        refreshDisplayBounds();
+        if (cursor == null || lp == null) {
+            showCursor();
+            return;
+        }
+        try {
+            if (cursor.getParent() == null) {
+                cursor = null;
+                lp = null;
+                showCursor();
+                return;
+            }
+            if (cursor.getVisibility() != View.VISIBLE) cursor.setVisibility(View.VISIBLE);
+            cursor.invalidate();
+            int size = dp(36);
+            lp.x = Math.max(0, Math.min(Math.max(0, screenW-size), x - dp(2)));
+            lp.y = Math.max(0, Math.min(Math.max(0, screenH-size), y - dp(2)));
+            wm.updateViewLayout(cursor, lp);
+        } catch (Exception e) {
+            removeCursorView();
+            showCursor();
+        }
+    }
+
+    private void showCursor() {
+        if (wm == null || !serviceAlive) return;
         if (cursor != null) {
-            try { if (cursor.getParent() != null) return; } catch (Exception ignored) {}
+            try { if (cursor.getParent() != null) { cursor.setVisibility(View.VISIBLE); return; } } catch (Exception ignored) {}
             cursor = null;
             lp = null;
         }
@@ -57,10 +113,13 @@ public class MouseAccessibilityService extends AccessibilityService {
             lp.gravity = Gravity.TOP | Gravity.LEFT;
             lp.x = Math.max(0, Math.min(Math.max(0, screenW-size), x - dp(2)));
             lp.y = Math.max(0, Math.min(Math.max(0, screenH-size), y - dp(2)));
+            cursor.setVisibility(View.VISIBLE);
             wm.addView(cursor, lp);
+            cursor.invalidate();
         } catch (Exception e) {
             cursor = null;
             lp = null;
+            // The watchdog will retry if the system temporarily rejects the overlay.
         }
     }
 
@@ -138,6 +197,11 @@ public class MouseAccessibilityService extends AccessibilityService {
     }
     public void scroll(int direction){handler.post(()->{Path p=new Path();p.moveTo(x,y);p.lineTo(x,y+(direction<0?-Math.min(420,screenH/3):Math.min(420,screenH/3)));dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(p,0,350)).build(),null,null);});}
     public boolean goBack(){ return performGlobalAction(GLOBAL_ACTION_BACK); }
+    /** System navigation is performed through Android global actions, not fake pointer clicks. */
+    public boolean goHome(){ return performGlobalAction(GLOBAL_ACTION_HOME); }
+    public boolean showRecents(){ return performGlobalAction(GLOBAL_ACTION_RECENTS); }
+    public boolean showQuickSettings(){ return performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS); }
+    public boolean showNotifications(){ return performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); }
     public void swipe(int direction){handler.post(()->{Path p=new Path();int startY=Math.max(80,Math.min(screenH-80,y));int endY=Math.max(40,Math.min(screenH-40,startY+(direction<0?-Math.min(320,screenH/4):Math.min(320,screenH/4))));p.moveTo(x,startY);p.lineTo(x,endY);dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(p,0,400)).build(),null,null);});}
 
     private AccessibilityNodeInfo focusedInput() {
@@ -215,7 +279,16 @@ public class MouseAccessibilityService extends AccessibilityService {
         });
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event){}
-    @Override public void onInterrupt(){}
-    @Override public void onDestroy(){instance=null;handler.post(()->{if(cursor!=null&&wm!=null){try{wm.removeView(cursor);}catch(Exception ignored){}cursor=null;}});super.onDestroy();}
+    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
+        // Window changes can detach overlays on some Android builds; verify the pointer after them.
+        if (serviceAlive) handler.post(this::ensureCursorVisible);
+    }
+    @Override public void onInterrupt() { if (serviceAlive) handler.post(this::ensureCursorVisible); }
+    @Override public void onDestroy(){
+        serviceAlive = false;
+        handler.removeCallbacks(cursorWatchdog);
+        handler.post(this::removeCursorView);
+        if (instance == this) instance = null;
+        super.onDestroy();
+    }
 }

@@ -44,7 +44,10 @@ public class RemoteServerService extends Service {
 
     private void listen() {
         while (running) {
-            try (ServerSocket listening = new ServerSocket(PORT)) {
+            try (ServerSocket listening = new ServerSocket()) {
+                // Listen on all local interfaces so Wi-Fi and hotspot clients can reach this phone.
+                listening.setReuseAddress(true);
+                listening.bind(new java.net.InetSocketAddress("0.0.0.0", PORT));
                 server = listening;
                 while (running) {
                     Socket socket = listening.accept();
@@ -85,6 +88,10 @@ public class RemoteServerService extends Service {
                             if (p.length < 2) throw new IllegalArgumentException("SCROLL requires direction");
                             a.scroll(Integer.parseInt(p[1])); out.println("OK SCROLL"); break;
                         case "BACK": out.println(a.goBack() ? "OK BACK" : "ERR BACK_FAILED"); break;
+                        case "HOME": out.println(a.goHome() ? "OK HOME" : "ERR HOME_FAILED"); break;
+                        case "RECENTS": out.println(a.showRecents() ? "OK RECENTS" : "ERR RECENTS_FAILED"); break;
+                        case "QUICK_SETTINGS": out.println(a.showQuickSettings() ? "OK QUICK_SETTINGS" : "ERR QUICK_SETTINGS_FAILED"); break;
+                        case "NOTIFICATIONS": out.println(a.showNotifications() ? "OK NOTIFICATIONS" : "ERR NOTIFICATIONS_FAILED"); break;
                         case "DRAG_UP": a.swipe(-1); out.println("OK DRAG_UP"); break;
                         case "DRAG_DOWN": a.swipe(1); out.println("OK DRAG_DOWN"); break;
                         case "PAGE_UP": a.swipe(-1); out.println("OK PAGE_UP"); break;
