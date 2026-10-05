@@ -87,15 +87,11 @@ public class MouseAccessibilityService extends AccessibilityService {
                 if(focused==null) focused=node;
                 CharSequence old=focused.getText();
                 String current=old==null?"":old.toString();
-                if("\n".equals(value)) {
-                    android.os.Bundle args=new android.os.Bundle();
-                    args.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_MOVEMENT_GRANULARITY_INT, AccessibilityNodeInfo.MOVEMENT_GRANULARITY_LINE);
-                    focused.performAction(AccessibilityNodeInfo.ACTION_IME_ENTER);
-                } else {
-                    android.os.Bundle args=new android.os.Bundle();
-                    args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,current+value);
-                    focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args);
-                }
+                // ACTION_IME_ENTER is not an AccessibilityNodeInfo action in Android SDK.
+                // Use ACTION_SET_TEXT for text input; for newline this works in multiline fields.
+                android.os.Bundle args=new android.os.Bundle();
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,current+value);
+                focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args);
                 if(focused!=node) focused.recycle();
                 node.recycle();
             } catch(Exception ignored) {}
