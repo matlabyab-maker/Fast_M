@@ -127,48 +127,91 @@ public class MouseAccessibilityService extends AccessibilityService {
             }
         });
     }
-    public void click(boolean longPress){handler.post(()->{Path p=new Path();p.moveTo(x,y);GestureDescription.StrokeDescription stroke=new GestureDescription.StrokeDescription(p,0,longPress?850:70);dispatchGesture(new GestureDescription.Builder().addStroke(stroke).build(),null,null);});}
+    /** Only performs a primary tap or a sustained primary press. Secondary click is intentionally not emulated. */
+    public void click(boolean longPress){
+        if (longPress) return; // Never turn a right-click request into an accidental primary click.
+        handler.post(()->{
+            Path p=new Path(); p.moveTo(x,y);
+            GestureDescription.StrokeDescription stroke=new GestureDescription.StrokeDescription(p,0,70);
+            dispatchGesture(new GestureDescription.Builder().addStroke(stroke).build(),null,null);
+        });
+    }
     public void scroll(int direction){handler.post(()->{Path p=new Path();p.moveTo(x,y);p.lineTo(x,y+(direction<0?-Math.min(420,screenH/3):Math.min(420,screenH/3)));dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(p,0,350)).build(),null,null);});}
-    public void goBack(){handler.post(()->performGlobalAction(GLOBAL_ACTION_BACK));}
+    public boolean goBack(){ return performGlobalAction(GLOBAL_ACTION_BACK); }
     public void swipe(int direction){handler.post(()->{Path p=new Path();int startY=Math.max(80,Math.min(screenH-80,y));int endY=Math.max(40,Math.min(screenH-40,startY+(direction<0?-Math.min(320,screenH/4):Math.min(320,screenH/4))));p.moveTo(x,startY);p.lineTo(x,endY);dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(p,0,400)).build(),null,null);});}
+
+    private AccessibilityNodeInfo focusedInput() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return null;
+        AccessibilityNodeInfo focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focused != null) { root.recycle(); return focused; }
+        return root;
+    }
+
+    public void editAction(int action) {
+        handler.post(() -> {
+            AccessibilityNodeInfo node = null;
+            try {
+                node = focusedInput();
+                if (node != null) node.performAction(action);
+            } catch (Exception ignored) {
+            } finally { if (node != null) node.recycle(); }
+        });
+    }
 
     public void typeText(String value) {
         handler.post(() -> {
+            AccessibilityNodeInfo node = null;
             try {
-                AccessibilityNodeInfo node=getRootInActiveWindow();
-                if(node==null)return;
-                AccessibilityNodeInfo focused=node.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-                if(focused==null) focused=node;
-                CharSequence old=focused.getText();
-                String current=old==null?"":old.toString();
-                // ACTION_IME_ENTER is not an AccessibilityNodeInfo action in Android SDK.
-                // Use ACTION_SET_TEXT for text input; for newline this works in multiline fields.
-                android.os.Bundle args=new android.os.Bundle();
-                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,current+value);
-                focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args);
-                if(focused!=node) focused.recycle();
-                node.recycle();
-            } catch(Exception ignored) {}
+                node = focusedInput();
+                if (node == null || !node.isEditable()) return;
+                CharSequence old = node.getText();
+                String current = old == null ? "" : old.toString();
+                int start = node.getTextSelectionStart();
+                int end = node.getTextSelectionEnd();
+                if (start < 0 || end < 0 || start > current.length() || end > current.length()) {
+                    start = end = current.length();
+                }
+                if (start > end) { int t=start; start=end; end=t; }
+                String updated = current.substring(0,start) + value + current.substring(end);
+                android.os.Bundle args = new android.os.Bundle();
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, updated);
+                if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)) {
+                    android.os.Bundle sel = new android.os.Bundle();
+                    sel.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, start + value.length());
+                    sel.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, start + value.length());
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, sel);
+                }
+            } catch(Exception ignored) {
+            } finally { if (node != null) node.recycle(); }
         });
     }
 
     public void backspace() {
         handler.post(() -> {
+            AccessibilityNodeInfo node = null;
             try {
-                AccessibilityNodeInfo root=getRootInActiveWindow();
-                if(root==null)return;
-                AccessibilityNodeInfo node=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-                if(node!=null) {
-                    CharSequence text=node.getText();
-                    if(text!=null && text.length()>0) {
-                        android.os.Bundle args=new android.os.Bundle();
-                        args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,text.subSequence(0,text.length()-1));
-                        node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args);
-                    }
-                    node.recycle();
+                node = focusedInput();
+                if (node == null || !node.isEditable()) return;
+                CharSequence old = node.getText();
+                if (old == null) return;
+                String current = old.toString();
+                int start = node.getTextSelectionStart(), end = node.getTextSelectionEnd();
+                if (start < 0 || end < 0 || start > current.length() || end > current.length()) start=end=current.length();
+                if (start > end) { int t=start; start=end; end=t; }
+                if (start == end && start > 0) start--;
+                if (start == end) return;
+                String updated = current.substring(0,start) + current.substring(end);
+                android.os.Bundle args = new android.os.Bundle();
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, updated);
+                if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)) {
+                    android.os.Bundle sel = new android.os.Bundle();
+                    sel.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,start);
+                    sel.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,start);
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,sel);
                 }
-                root.recycle();
-            } catch(Exception ignored) {}
+            } catch(Exception ignored) {
+            } finally { if (node != null) node.recycle(); }
         });
     }
 
