@@ -21,10 +21,17 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import java.net.Socket;
 import java.io.PrintWriter;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,10 +42,18 @@ public class MainActivity extends Activity {
     private TextView status;
     private volatile PrintWriter writer;
     private volatile Socket clientSocket;
+    private volatile BufferedReader reader;
+    private volatile long lastPongAt = 0L;
+    private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor();
+    private volatile boolean heartbeatStarted = false;
+    private final Object reconnectLock = new Object();
     private final ExecutorService sender = Executors.newSingleThreadExecutor();
     private volatile boolean connected = false;
     private int touchX, touchY;
     private boolean showingMenu2 = false;
+    private volatile String targetAddress = null;
+    private volatile float sensitivity = 1.0f;
+    private volatile float pointerSpeed = 2.0f;
     // Coalesce high-frequency touch movement so a fast finger cannot build an unbounded queue.
     private final Object moveLock = new Object();
     private int pendingMoveX, pendingMoveY;
@@ -121,11 +136,19 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             try {
                 Socket s = new Socket();
+                s.setKeepAlive(true);
+                s.setTcpNoDelay(true);
                 s.connect(new java.net.InetSocketAddress(address.trim(), PORT), 5000);
                 PrintWriter w = new PrintWriter(s.getOutputStream(), true);
+                BufferedReader r = new BufferedReader(new InputStreamReader(s.getInputStream()));
                 clientSocket = s;
                 writer = w;
+                reader = r;
+                targetAddress = address.trim();
                 connected = true;
+                lastPongAt = System.currentTimeMillis();
+                startReader(r, s);
+                startHeartbeat();
                 runOnUiThread(onConnected);
             } catch (Exception e) {
                 connected = false;
@@ -152,7 +175,194 @@ public class MainActivity extends Activity {
 
         RemoteHitLayout hits = new RemoteHitLayout();
         canvas.addView(hits, new FrameLayout.LayoutParams(-1, -1));
+        // Two slim vertical controls in the otherwise empty right-hand area.
+        addVerticalControl(canvas, "حساسیت", true, sensitivity, 0.925f);
+        addVerticalControl(canvas, "سرعت", false, pointerSpeed, 0.965f);
         setContentView(canvas);
+    }
+
+
+
+    // Menu 3: large Fast Keyboard-style panel on the left and mouse controls on the right.
+    private void showKeyboardRemote() {
+        FrameLayout screen = new FrameLayout(this);
+        screen.setBackgroundColor(Color.rgb(173,218,232));
+
+        LinearLayout keyboard = new LinearLayout(this);
+        keyboard.setOrientation(LinearLayout.VERTICAL);
+        keyboard.setPadding(dp(5),dp(5),dp(5),dp(5));
+        keyboard.setBackgroundColor(Color.rgb(173,218,232));
+        FrameLayout.LayoutParams klp = new FrameLayout.LayoutParams(0,-1,Gravity.LEFT);
+        klp.width = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
+        screen.addView(keyboard,klp);
+
+        // Three live suggestion slots, deliberately full-width and easy to tap.
+        LinearLayout suggestions = new LinearLayout(this);
+        suggestions.setOrientation(LinearLayout.HORIZONTAL);
+        String[] suggested = {"سلام","خوب","بله"};
+        for(String word:suggested) {
+            Button b = keyboardKey(word, 16, Color.rgb(255,247,224));
+            b.setOnClickListener(v -> sendText(word));
+            suggestions.addView(b,new LinearLayout.LayoutParams(0,dp(48),1));
+        }
+        keyboard.addView(suggestions,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        String[][] rows = {
+            {"Copy","Paste","Undo","Redo","امکانات"},
+            {"1","2","3","4","5","6","7","8","9","0","-","="},
+            {"Q","W","E","R","T","Y","U","I","O","P","[","]"},
+            {"A","S","D","F","G","H","J","K","L",";","'","⌫"},
+            {"Shift","Z","X","C","V","B","N","M",",",".","/","Enter"},
+            {"Ctrl","Alt","Space","←","↓","↑","→"}
+        };
+        for(int ri=0;ri<rows.length;ri++) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for(String key:rows[ri]) {
+                Button b=keyboardKey(key,ri==0?13:17,Color.rgb(255,248,230));
+                LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-1,1f);
+                bp.setMargins(dp(2),dp(3),dp(2),dp(3));
+                row.addView(b,bp);
+                b.setOnClickListener(v -> {
+                    switch(key) {
+                        case "Copy": send("COPY"); break;
+                        case "Paste": send("PASTE"); break;
+                        case "Undo": send("UNDO"); break;
+                        case "Redo": send("REDO"); break;
+                        case "امکانات": showRemoteImage(false); break;
+                        case "Space": sendText(" "); break;
+                        case "Enter": sendText("\n"); break;
+                        case "⌫": send("KEY_BACKSPACE"); break;
+                        case "Shift": break;
+                        case "Ctrl": case "Alt": break;
+                        case "←": send("MOVE -18 0"); break;
+                        case "→": send("MOVE 18 0"); break;
+                        case "↑": send("MOVE 0 -18"); break;
+                        case "↓": send("MOVE 0 18"); break;
+                        default: sendText(key);
+                    }
+                });
+            }
+            keyboard.addView(row,new LinearLayout.LayoutParams(-1,0,ri==0?0.8f:1f));
+        }
+
+        // Right panel follows the reference: Menu 3, Left Click, and a small drag touch pad.
+        LinearLayout panel=new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.rgb(173,218,232));
+        FrameLayout.LayoutParams plp=new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
+        plp.leftMargin=(int)(getResources().getDisplayMetrics().widthPixels*0.74f);
+        screen.addView(panel,plp);
+        Button menu=keyboardKey("Menu 3",24,Color.rgb(255,128,0));
+        panel.addView(menu,new LinearLayout.LayoutParams(-1,0,0.14f));
+        menu.setOnClickListener(v->showRemoteImage(false));
+        Button click=keyboardKey("Left Click",23,Color.rgb(239,143,218));
+        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.20f));
+        click.setOnClickListener(v->send("CLICK_LEFT"));
+        View spacer=new View(this);
+        panel.addView(spacer,new LinearLayout.LayoutParams(-1,0,0.48f));
+        TextView touch=new TextView(this);
+        touch.setText("Touch");
+        touch.setTextSize(20);
+        touch.setTextColor(Color.rgb(76,53,74));
+        touch.setGravity(Gravity.CENTER);
+        touch.setBackground(bg(Color.rgb(173,218,232),0));
+        panel.addView(touch,new LinearLayout.LayoutParams(-1,0,0.18f));
+        final int[] last={0,0};
+        touch.setOnTouchListener((v,e)->{
+            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){last[0]=(int)e.getX();last[1]=(int)e.getY();return true;}
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE && connected){
+                int x=(int)e.getX(), y=(int)e.getY();
+                int dx=x-last[0],dy=y-last[1];last[0]=x;last[1]=y;
+                if(dx!=0||dy!=0)queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
+                return true;
+            }
+            return e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL;
+        });
+        setContentView(screen);
+    }
+
+    private Button keyboardKey(String label,int size,int color) {
+        Button b=new Button(this);
+        b.setText(label); b.setAllCaps(false); b.setTextSize(size);
+        b.setTextColor(Color.rgb(75,52,74));
+        b.setPadding(dp(1),dp(1),dp(1),dp(1));
+        GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(5));
+        d.setStroke(dp(1),Color.rgb(73,156,193));b.setBackground(d);
+        b.setMinHeight(0);b.setMinimumHeight(0);
+        return b;
+    }
+
+    private void sendText(String value) {
+        if(value==null || value.isEmpty()) return;
+        // Text commands are sent to the target's focused accessibility node.
+        String encoded=android.util.Base64.encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8),android.util.Base64.NO_WRAP);
+        send("TEXT "+encoded);
+    }
+
+    private void addVerticalControl(FrameLayout canvas, String label, boolean isSensitivity,
+                                    float initialValue, float xFraction) {
+        VerticalControl control = new VerticalControl(label, isSensitivity, initialValue);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(24), dp(190),
+                Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        lp.rightMargin = dp(isSensitivity ? 34 : 6); // two distinct, narrow vertical rails
+        canvas.addView(control, lp);
+    }
+
+    private class VerticalControl extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final String label;
+        private final boolean isSensitivity;
+        private float value;
+        private float downY;
+        private final int minValue = 1, maxValue = 5;
+
+        VerticalControl(String label, boolean isSensitivity, float initialValue) {
+            super(MainActivity.this);
+            this.label = label;
+            this.isSensitivity = isSensitivity;
+            this.value = Math.max(minValue, Math.min(maxValue, initialValue));
+            setContentDescription(label);
+            setBackgroundColor(Color.argb(35, 0, 0, 0));
+        }
+
+        @Override protected void onDraw(Canvas c) {
+            super.onDraw(c);
+            float cx = getWidth()/2f;
+            float top = dp(28), bottom = getHeight()-dp(10);
+            paint.setStrokeWidth(dp(3));
+            paint.setColor(Color.rgb(70,70,70));
+            c.drawLine(cx, top, cx, bottom, paint);
+            float fraction = (value-minValue)/(float)(maxValue-minValue);
+            float thumbY = bottom - fraction*(bottom-top);
+            paint.setColor(isSensitivity ? Color.rgb(220,40,140) : Color.rgb(20,110,220));
+            c.drawCircle(cx, thumbY, dp(7), paint);
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTextSize(dp(10));
+            paint.setColor(Color.rgb(35,35,35));
+            c.drawText(isSensitivity ? "حس" : "سر", cx, dp(12), paint);
+            c.drawText(String.valueOf(Math.round(value)), cx, getHeight()-dp(1), paint);
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent e) {
+            if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
+                downY=e.getY(); updateValue(e.getY()); getParent().requestDisallowInterceptTouchEvent(true); return true;
+            }
+            if (e.getActionMasked()==MotionEvent.ACTION_MOVE) { updateValue(e.getY()); return true; }
+            if (e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL) {
+                updateValue(e.getY()); getParent().requestDisallowInterceptTouchEvent(false); performClick(); return true;
+            }
+            return true;
+        }
+        private void updateValue(float y) {
+            float top=dp(28), bottom=getHeight()-dp(10);
+            float f=1f-(Math.max(top,Math.min(bottom,y))-top)/(bottom-top);
+            value=minValue+f*(maxValue-minValue);
+            if(isSensitivity) sensitivity=0.5f+((value-1f)*0.375f); // 0.5x to 2.0x
+            else pointerSpeed=0.5f+((value-1f)*0.875f); // 0.5x to 4.0x
+            invalidate();
+        }
+        @Override public boolean performClick() { super.performClick(); return true; }
     }
 
     private class RemoteHitLayout extends ViewGroup {
@@ -173,6 +383,8 @@ public class MainActivity extends Activity {
                 addHit(0.724f,0.263f,1.000f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.326f,0.263f,0.724f,1.000f);
             } else {
+                // Tap the empty upper-right area to open the keyboard/remote third scene.
+                addHit(0.75f,0.00f,1.00f,0.18f,()->showKeyboardRemote());
                 // Image 1: Page Up / Page Down, Menu 2, Left Click and Drag.
                 addHit(0.00f,0.00f,0.195f,0.315f,()->send("SCROLL -1"));
                 addHit(0.195f,0.00f,0.390f,0.315f,()->send("SCROLL 1"));
@@ -202,7 +414,10 @@ public class MainActivity extends Activity {
                             if(connected) {
                                 int x=(int)e.getX(), y=(int)e.getY();
                                 int dx=x-touchX, dy=y-touchY; touchX=x; touchY=y;
-                                if(dx!=0 || dy!=0) queueMove(dx,dy);
+                                if(dx!=0 || dy!=0) {
+                                    float multiplier = sensitivity * pointerSpeed;
+                                    queueMove(Math.round(dx * multiplier), Math.round(dy * multiplier));
+                                }
                             } else { touchX=(int)e.getX(); touchY=(int)e.getY(); }
                             return true;
                         case MotionEvent.ACTION_UP:
@@ -258,14 +473,7 @@ public class MainActivity extends Activity {
                             return;
                         }
                     }
-                    PrintWriter w = writer;
-                    if (!connected || w == null) continue;
-                    try {
-                        synchronized (w) {
-                            w.println("MOVE " + mx + " " + my);
-                            if (w.checkError()) connected = false;
-                        }
-                    } catch (RuntimeException ignored) { }
+                    sendWithReconnect("MOVE " + mx + " " + my);
                 }
             });
         } catch (java.util.concurrent.RejectedExecutionException ignored) {
@@ -273,26 +481,138 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void send(String command) {
-        if (!connected || command == null) return;
-        try {
-            sender.execute(() -> {
-                PrintWriter w = writer;
-                if (!connected || w == null) return;
-                try {
-                    synchronized (w) {
-                        w.println(command);
-                        if (w.checkError()) {
-                            connected = false;
-                            runOnUiThread(() -> { if (status != null) status.setText("وضعیت: خطای ارسال؛ دوباره متصل شو"); });
+    private void startReader(BufferedReader r, Socket socket) {
+        new Thread(() -> {
+            try {
+                String line;
+                while (connected && !socket.isClosed() && (line = r.readLine()) != null) {
+                    if (line.startsWith("PONG")) {
+                        lastPongAt = System.currentTimeMillis();
+                        if (line.contains("NO_ACCESSIBILITY")) {
+                            runOnUiThread(() -> Toast.makeText(this,
+                                "سرویس دسترس‌پذیری گوشی مقصد فعال نیست؛ نشانگر قابل کنترل نیست",
+                                Toast.LENGTH_LONG).show());
                         }
                     }
-                } catch (RuntimeException ex) {
-                    runOnUiThread(() -> { if (status != null) status.setText("وضعیت: خطای ارتباط"); });
                 }
-            });
+            } catch (Exception ignored) {
+            } finally {
+                if (clientSocket == socket) connected = false;
+            }
+        }, "fast-m-reader").start();
+    }
+
+    private void startHeartbeat() {
+        if (heartbeatStarted) return;
+        heartbeatStarted = true;
+        heartbeat.scheduleWithFixedDelay(() -> {
+            // Keep trying for as long as the user has not explicitly disconnected/exited.
+            String address = targetAddress;
+            if (address == null || address.isEmpty()) return;
+
+            long age = System.currentTimeMillis() - lastPongAt;
+            if (connected && age > 15000L) {
+                closeSocketOnly();
+            }
+
+            if (!connected || clientSocket == null || clientSocket.isClosed() || writer == null) {
+                try {
+                    reconnectBlocking();
+                } catch (Exception ignored) {
+                    // Do not clear targetAddress: next scheduled pass retries automatically.
+                    connected = false;
+                }
+                return;
+            }
+
+            try {
+                PrintWriter w = writer;
+                if (w != null) {
+                    synchronized (w) {
+                        w.println("PING");
+                        if (w.checkError()) {
+                            connected = false;
+                            closeSocketOnly();
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                closeSocketOnly();
+            }
+        }, 1, 3, TimeUnit.SECONDS);
+    }
+
+    private void send(String command) {
+        if (command == null) return;
+        try {
+            sender.execute(() -> sendWithReconnect(command));
         } catch (java.util.concurrent.RejectedExecutionException ignored) { }
     }
-    private void disconnect(){connected=false;try{if(writer!=null)writer.close();if(clientSocket!=null)clientSocket.close();}catch(Exception ignored){}writer=null;clientSocket=null;if(status!=null)status.setText("وضعیت: قطع");}
-    @Override protected void onDestroy(){disconnect();sender.shutdownNow();super.onDestroy();}
+
+    private void sendWithReconnect(String command) {
+        for (int attempt=0; attempt<2; attempt++) {
+            try {
+                if (!connected || writer == null || clientSocket == null || clientSocket.isClosed()) {
+                    reconnectBlocking();
+                }
+                PrintWriter w = writer;
+                if (!connected || w == null) return;
+                synchronized (w) {
+                    w.println(command);
+                    if (!w.checkError()) return;
+                }
+            } catch (Exception ignored) { }
+            closeSocketOnly();
+        }
+        connected = false;
+        runOnUiThread(() -> Toast.makeText(this,
+            "ارتباط قطع شد؛ IP و شبکهٔ گوشی مقصد را بررسی کن", Toast.LENGTH_SHORT).show());
+    }
+
+    private void reconnectBlocking() throws Exception {
+        synchronized (reconnectLock) {
+            String address = targetAddress;
+            if (address == null || address.isEmpty())
+                throw new IllegalStateException("Manual disconnect or no target address");
+            if (connected && clientSocket != null && !clientSocket.isClosed()
+                    && writer != null && !writer.checkError()) return;
+
+            closeSocketOnly();
+            Socket s = new Socket();
+            try {
+                s.setKeepAlive(true);
+                s.setTcpNoDelay(true);
+                s.connect(new java.net.InetSocketAddress(address, PORT), 2500);
+                PrintWriter w = new PrintWriter(s.getOutputStream(), true);
+                BufferedReader r = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                // User may have pressed disconnect while connect() was in progress.
+                if (targetAddress == null) {
+                    s.close();
+                    throw new IllegalStateException("Manual disconnect");
+                }
+                clientSocket = s;
+                writer = w;
+                reader = r;
+                connected = true;
+                lastPongAt = System.currentTimeMillis();
+                startReader(r, s);
+                startHeartbeat();
+            } catch (Exception e) {
+                try { s.close(); } catch (Exception ignored) { }
+                throw e;
+            }
+        }
+    }
+
+    private void closeSocketOnly() {
+        connected = false;
+        try { if(writer!=null) writer.close(); } catch(Exception ignored) { }
+        try { if(clientSocket!=null) clientSocket.close(); } catch(Exception ignored) { }
+        try { if(reader!=null) reader.close(); } catch(Exception ignored) { }
+        reader = null;
+        writer = null;
+        clientSocket = null;
+    }
+    private void disconnect(){targetAddress=null;closeSocketOnly();if(status!=null)status.setText("وضعیت: قطع");}
+    @Override protected void onDestroy(){disconnect();sender.shutdownNow();heartbeat.shutdownNow();super.onDestroy();}
 }
