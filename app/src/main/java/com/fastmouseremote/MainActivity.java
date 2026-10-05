@@ -3,6 +3,7 @@ package com.fastmouseremote;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -59,6 +60,8 @@ public class MainActivity extends Activity {
     private int pendingMoveX, pendingMoveY;
     private boolean moveWorkerRunning = false;
     private static final int PORT = 47821;
+    private static final String PREFS_NAME = "FastMSettings";
+    private static final String KEY_TARGET_IP = "last_target_ip";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -109,8 +112,10 @@ public class MainActivity extends Activity {
         return "IP را از جزئیات شبکهٔ Wi-Fi بررسی کن";
     }
     private void showController() {
-        disconnect();
         final EditText ip = new EditText(this);
+        String savedIp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_TARGET_IP, "");
+        ip.setText(savedIp);
+        ip.setSelection(ip.getText().length());
         ip.setSingleLine(true);
         ip.setHint("IP گوشی هدف، مثلاً 192.168.1.5");
         new AlertDialog.Builder(this)
@@ -118,11 +123,18 @@ public class MainActivity extends Activity {
             .setMessage("ابتدا در گوشی مقصد «شروع پذیرش اتصال ریموت» را بزن. هر دو گوشی باید روی یک Wi-Fi یا هات‌اسپات باشند.")
             .setView(ip)
             .setNegativeButton("لغو", (d,w) -> showHome())
-            .setPositiveButton("اتصال", (d,w) -> connectToTarget(ip.getText().toString().trim(), () -> {
-                showingMenu2 = false;
-                showRemoteImage(false);
-                Toast.makeText(this, "اتصال برقرار شد", Toast.LENGTH_SHORT).show();
-            }))
+            .setPositiveButton("اتصال", (d,w) -> {
+                String address = ip.getText().toString().trim();
+                if (!address.isEmpty()) {
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(KEY_TARGET_IP, address).apply();
+                    targetAddress = address; // preserve target for automatic retries, even after a failed first attempt
+                }
+                connectToTarget(address, () -> {
+                    showingMenu2 = false;
+                    showRemoteImage(false);
+                    Toast.makeText(this, "اتصال برقرار شد", Toast.LENGTH_SHORT).show();
+                });
+            })
             .setCancelable(false)
             .show();
     }
@@ -132,6 +144,8 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "IP گوشی هدف را وارد کن", Toast.LENGTH_LONG).show();
             return;
         }
+        targetAddress = address.trim();
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(KEY_TARGET_IP, targetAddress).apply();
         Toast.makeText(this, "در حال اتصال…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             try {
@@ -152,12 +166,11 @@ public class MainActivity extends Activity {
                 runOnUiThread(onConnected);
             } catch (Exception e) {
                 connected = false;
-                runOnUiThread(() -> new AlertDialog.Builder(this)
-                    .setTitle("اتصال ناموفق")
-                    .setMessage("اتصال به گوشی هدف برقرار نشد. IP، شبکهٔ مشترک، سرویس مقصد و مجوزها را بررسی کن.\n" + e.getMessage())
-                    .setPositiveButton("تلاش دوباره", (dialog, which) -> showController())
-                    .setNegativeButton("بازگشت", (dialog, which) -> showHome())
-                    .show());
+                // Keep the IP and continue automatic reconnect attempts.
+                startHeartbeat();
+                runOnUiThread(() -> Toast.makeText(this,
+                    "فعلاً اتصال برقرار نشد؛ IP ذخیره شد و اتصال خودکار ادامه می‌یابد.",
+                    Toast.LENGTH_LONG).show());
             }
         }, "fast-m-connect").start();
     }
@@ -303,9 +316,10 @@ public class MainActivity extends Activity {
     private void addVerticalControl(FrameLayout canvas, String label, boolean isSensitivity,
                                     float initialValue, float xFraction) {
         VerticalControl control = new VerticalControl(label, isSensitivity, initialValue);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(24), dp(190),
-                Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        lp.rightMargin = dp(isSensitivity ? 34 : 6); // two distinct, narrow vertical rails
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(24), dp(150),
+                Gravity.TOP | Gravity.RIGHT);
+        lp.topMargin = 0;
+        lp.rightMargin = dp(isSensitivity ? 30 : 2); // consecutive slim rails, aligned to the top edge
         canvas.addView(control, lp);
     }
 
@@ -384,19 +398,31 @@ public class MainActivity extends Activity {
                 addDragArea(0.326f,0.263f,0.724f,1.000f);
             } else {
                 // Tap the empty upper-right area to open the keyboard/remote third scene.
-                addHit(0.75f,0.00f,1.00f,0.18f,()->showKeyboardRemote());
+                addHit(0.72f,0.00f,0.91f,0.16f,()->showKeyboardRemote());
                 // Image 1: Page Up / Page Down, Menu 2, Left Click and Drag.
                 addHit(0.00f,0.00f,0.195f,0.315f,()->send("SCROLL -1"));
                 addHit(0.195f,0.00f,0.390f,0.315f,()->send("SCROLL 1"));
-                addHit(0.00f,0.315f,0.390f,0.402f,()->showRemoteImage(false));
+                addHit(0.015f,0.318f,0.375f,0.395f,()->showRemoteImage(false));
                 addHit(0.00f,0.402f,0.390f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.390f,0.402f,1.000f,1.000f);
             }
         }
+        private void flashTap(View v) {
+            android.graphics.drawable.Drawable old = v.getBackground();
+            android.graphics.drawable.GradientDrawable glow = new android.graphics.drawable.GradientDrawable();
+            glow.setColor(Color.argb(190, 255, 225, 0));
+            glow.setStroke(dp(2), Color.rgb(255, 190, 0));
+            v.setBackground(glow);
+            v.postDelayed(() -> v.setBackground(old), 180);
+        }
+
         private void addHit(float l,float t,float r,float b,Runnable action) {
             View v = new View(MainActivity.this);
             v.setBackgroundColor(Color.TRANSPARENT);
-            v.setOnClickListener(w -> action.run());
+            v.setOnClickListener(w -> {
+                flashTap(w);
+                action.run();
+            });
             addView(v);
             hitList.add(new Hit(v,l,t,r,b));
         }
@@ -614,5 +640,9 @@ public class MainActivity extends Activity {
         clientSocket = null;
     }
     private void disconnect(){targetAddress=null;closeSocketOnly();if(status!=null)status.setText("وضعیت: قطع");}
-    @Override protected void onDestroy(){disconnect();sender.shutdownNow();heartbeat.shutdownNow();super.onDestroy();}
+    @Override protected void onDestroy(){
+        // Keep the connection/reconnect loop alive across temporary Activity recreation.
+        // Explicit user stop/disconnect is the only place that clears targetAddress.
+        super.onDestroy();
+    }
 }

@@ -16,12 +16,14 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.widget.TextView;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.view.View;
 import android.view.WindowManager.LayoutParams;
 
 public class MouseAccessibilityService extends AccessibilityService {
     public static volatile MouseAccessibilityService instance;
-    private WindowManager wm; private TextView cursor; private LayoutParams lp; private final Handler handler=new Handler(Looper.getMainLooper());
+    private WindowManager wm; private View cursor; private LayoutParams lp; private final Handler handler=new Handler(Looper.getMainLooper());
     private int x=150,y=250; private int screenW=720,screenH=1280;
     @Override public void onServiceConnected(){
         super.onServiceConnected();
@@ -36,25 +38,77 @@ public class MouseAccessibilityService extends AccessibilityService {
             showCursor();
         });
     }
-    private void showCursor(){if(cursor!=null||wm==null)return;try{cursor=new TextView(this);
-        // A computer-style arrow pointer rather than a dot; accessibility overlay spans system bars.
-        cursor.setText("➤");
-        cursor.setTextSize(32);
-        cursor.setTextColor(Color.rgb(255, 80, 0));
-        cursor.setShadowLayer(4,1,1,Color.BLACK);
-        cursor.setRotation(-45f);
-        cursor.setGravity(Gravity.CENTER);lp=new LayoutParams(42,42,LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,LayoutParams.FLAG_NOT_FOCUSABLE|LayoutParams.FLAG_NOT_TOUCHABLE|LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);lp.gravity=Gravity.TOP|Gravity.LEFT;lp.x=Math.max(0,Math.min(screenW-42,x-8));lp.y=Math.max(0,Math.min(screenH-42,y-8));wm.addView(cursor,lp);}catch(Exception e){cursor=null;}}
+    private void showCursor() {
+        if (wm == null) return;
+        if (cursor != null) {
+            try { if (cursor.getParent() != null) return; } catch (Exception ignored) {}
+            cursor = null;
+            lp = null;
+        }
+        try {
+            CursorView pointer = new CursorView(this);
+            cursor = pointer;
+            int size = dp(36);
+            lp = new LayoutParams(size, size,
+                    LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_NOT_TOUCHABLE
+                            | LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.TOP | Gravity.LEFT;
+            lp.x = Math.max(0, Math.min(Math.max(0, screenW-size), x - dp(2)));
+            lp.y = Math.max(0, Math.min(Math.max(0, screenH-size), y - dp(2)));
+            wm.addView(cursor, lp);
+        } catch (Exception e) {
+            cursor = null;
+            lp = null;
+        }
+    }
+
+    private int dp(float v) {
+        return (int)(v * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static class CursorView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        CursorView(AccessibilityService context) {
+            super(context);
+            setWillNotDraw(false);
+        }
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            // Draw directly in the view's pixel coordinate system; do not scale twice.
+            float w = getWidth(), h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            Path arrow = new Path();
+            arrow.moveTo(w * 0.06f, h * 0.03f);
+            arrow.lineTo(w * 0.12f, h * 0.82f);
+            arrow.lineTo(w * 0.34f, h * 0.62f);
+            arrow.lineTo(w * 0.52f, h * 0.96f);
+            arrow.lineTo(w * 0.70f, h * 0.87f);
+            arrow.lineTo(w * 0.52f, h * 0.56f);
+            arrow.lineTo(w * 0.88f, h * 0.53f);
+            arrow.close();
+            paint.setColor(Color.rgb(255, 210, 0));
+            paint.setStyle(Paint.Style.FILL);
+            canvas.drawPath(arrow, paint);
+            paint.setColor(Color.BLACK);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(2f, w * 0.05f));
+            paint.setStrokeJoin(Paint.Join.ROUND);
+            canvas.drawPath(arrow, paint);
+        }
+    }
     public void moveCursor(int dx, int dy) {
         handler.post(() -> {
-            x = Math.max(1, Math.min(screenW - 1, x + dx * 2));
-            y = Math.max(1, Math.min(screenH - 1, y + dy * 2));
+            x = Math.max(0, Math.min(Math.max(0, screenW - dp(36)), x + dx * 2));
+            y = Math.max(0, Math.min(Math.max(0, screenH - dp(36)), y + dy * 2));
             if (cursor == null || lp == null) {
                 showCursor();
             }
             if (cursor == null || lp == null) return;
 
-            lp.x = Math.max(0, Math.min(screenW - 42, x - 8));
-            lp.y = Math.max(0, Math.min(screenH - 42, y - 8));
+            lp.x = Math.max(0, Math.min(Math.max(0, screenW - dp(36)), x - dp(2)));
+            lp.y = Math.max(0, Math.min(Math.max(0, screenH - dp(36)), y - dp(2)));
             try {
                 if (cursor.getParent() == null) {
                     cursor = null;
