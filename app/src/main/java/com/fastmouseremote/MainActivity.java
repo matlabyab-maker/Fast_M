@@ -12,6 +12,10 @@ import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.graphics.drawable.Drawable;
+import android.view.ViewGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -33,6 +37,7 @@ public class MainActivity extends Activity {
     private final ExecutorService sender = Executors.newSingleThreadExecutor();
     private volatile boolean connected = false;
     private int touchX, touchY;
+    private boolean showingMenu2 = false;
     // Coalesce high-frequency touch movement so a fast finger cannot build an unbounded queue.
     private final Object moveLock = new Object();
     private int pendingMoveX, pendingMoveY;
@@ -89,82 +94,103 @@ public class MainActivity extends Activity {
     }
     private void showController() {
         disconnect();
-        setContentView(new LinearLayout(this));
-        LinearLayout page = new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(14), dp(12), dp(14), dp(14));
-        page.setBackgroundColor(Color.rgb(245,247,251));
-        setContentView(page);
-
-        TextView heading = text("Fast M — ریموت", 23);
-        heading.setTypeface(null, Typeface.BOLD);
-        page.addView(heading, new LinearLayout.LayoutParams(-1, dp(42)));
-
-        LinearLayout connection = new LinearLayout(this);
-        connection.setOrientation(LinearLayout.VERTICAL);
-        connection.setPadding(dp(10), dp(4), dp(10), dp(4));
-        connection.setBackground(bg(Color.WHITE, 12));
-        ipInput = new EditText(this); ipInput.setSingleLine(true); ipInput.setHint("IP گوشی موس");
-        ipInput.setTextSize(15); ipInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
-        connection.addView(ipInput, new LinearLayout.LayoutParams(-1, dp(45)));
-        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-        Button connect = new Button(this); connect.setText("اتصال"); connect.setAllCaps(false); connect.setOnClickListener(v -> connectToTarget());
-        actions.addView(connect, new LinearLayout.LayoutParams(0, dp(46), 1));
-        Button cut = new Button(this); cut.setText("قطع"); cut.setAllCaps(false); cut.setOnClickListener(v -> disconnect());
-        actions.addView(cut, new LinearLayout.LayoutParams(0, dp(46), 1));
-        connection.addView(actions);
-        status = text("وضعیت: قطع", 13); connection.addView(status);
-        page.addView(connection, new LinearLayout.LayoutParams(-1, -2));
-
-        LinearLayout controls = new LinearLayout(this); controls.setOrientation(LinearLayout.HORIZONTAL); controls.setGravity(Gravity.CENTER);
-        Button back = new Button(this); back.setText("Back"); back.setAllCaps(false); back.setTextSize(14);
-        back.setOnClickListener(v -> send("BACK"));
-        controls.addView(back, new LinearLayout.LayoutParams(0, dp(54), 1));
-        Button dragUp = new Button(this); dragUp.setText("Drag بالا"); dragUp.setAllCaps(false); dragUp.setTextSize(14);
-        dragUp.setOnClickListener(v -> send("DRAG_UP"));
-        controls.addView(dragUp, new LinearLayout.LayoutParams(0, dp(54), 1));
-        Button dragDown = new Button(this); dragDown.setText("Drag پایین"); dragDown.setAllCaps(false); dragDown.setTextSize(14);
-        dragDown.setOnClickListener(v -> send("DRAG_DOWN"));
-        controls.addView(dragDown, new LinearLayout.LayoutParams(0, dp(54), 1));
-        page.addView(controls, new LinearLayout.LayoutParams(-1, dp(60)));
-
-        TextView pad = text("میدان لمس و درگ\nانگشت را برای حرکت نشانگر بکش", 18);
-        pad.setGravity(Gravity.CENTER); pad.setTextColor(Color.rgb(32,63,100));
-        pad.setBackground(bg(Color.rgb(224,233,245), 18));
-        LinearLayout.LayoutParams padParams = new LinearLayout.LayoutParams(-1, 0, 1f);
-        padParams.setMargins(0, dp(6), 0, 0);
-        page.addView(pad, padParams);
-        pad.setOnTouchListener((v,e)->{
-            // Consume every touch event: never let a touch escape into a parent view.
-            try {
-                switch (e.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        touchX = (int)e.getX(); touchY = (int)e.getY();
-                        v.getParent().requestDisallowInterceptTouchEvent(true);
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        if (connected) {
-                            int x=(int)e.getX(), y=(int)e.getY();
-                            int dx=x-touchX, dy=y-touchY;
-                            touchX=x; touchY=y;
-                            if(dx!=0||dy!=0) queueMove(dx,dy);
-                        } else {
-                            touchX=(int)e.getX(); touchY=(int)e.getY();
-                        }
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
-                        v.getParent().requestDisallowInterceptTouchEvent(false);
-                        return true;
-                    default:
-                        return true;
-                }
-            } catch (RuntimeException ex) {
-                // Keep a touch-handler problem from crashing the whole controller screen.
-                return true;
-            }
-        });
+        showingMenu2 = false;
+        showRemoteImage(false);
     }
+
+    // The uploaded reference images are used as the actual screen backgrounds.
+    // Transparent hit areas sit over the labels and do not add visible controls.
+    private void showRemoteImage(boolean menu2) {
+        showingMenu2 = menu2;
+        FrameLayout canvas = new FrameLayout(this);
+        canvas.setBackgroundColor(Color.rgb(173, 218, 232));
+        ImageView background = new ImageView(this);
+        background.setImageResource(menu2 ? R.drawable.remote_menu2 : R.drawable.remote_menu1);
+        background.setScaleType(ImageView.ScaleType.FIT_XY);
+        canvas.addView(background, new FrameLayout.LayoutParams(-1, -1));
+
+        RemoteHitLayout hits = new RemoteHitLayout();
+        canvas.addView(hits, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(canvas);
+    }
+
+    private class RemoteHitLayout extends ViewGroup {
+        private final java.util.ArrayList<Hit> hitList = new java.util.ArrayList<>();
+        RemoteHitLayout() {
+            super(MainActivity.this);
+            setClipChildren(true);
+            if (!showingMenu2) {
+                // Image 2: Point Zoom / Copy / Past; Menu 1 / Back; Page Up / Page Down;
+                // Drag in the lower middle and Left Click at the lower right.
+                addHit(0.00f,0.00f,0.162f,0.120f,()->send("ZOOM"));
+                addHit(0.162f,0.00f,0.246f,0.120f,()->send("COPY"));
+                addHit(0.246f,0.00f,0.326f,0.120f,()->send("PASTE"));
+                addHit(0.00f,0.120f,0.184f,0.263f,()->showRemoteImage(true));
+                addHit(0.184f,0.120f,0.326f,0.263f,()->send("BACK"));
+                addHit(0.00f,0.263f,0.326f,0.625f,()->send("PAGE_UP"));
+                addHit(0.00f,0.625f,0.326f,1.000f,()->send("PAGE_DOWN"));
+                addHit(0.326f,0.263f,0.724f,1.000f,()->{});
+                addHit(0.724f,0.263f,1.000f,1.000f,()->send("LEFT_CLICK"));
+                addDragArea(0.326f,0.263f,0.724f,1.000f);
+            } else {
+                // Image 1: Page Up / Page Down, Menu 2, Left Click and Drag.
+                addHit(0.00f,0.00f,0.195f,0.315f,()->send("PAGE_UP"));
+                addHit(0.195f,0.00f,0.390f,0.315f,()->send("PAGE_DOWN"));
+                addHit(0.00f,0.315f,0.390f,0.402f,()->showRemoteImage(false));
+                addHit(0.00f,0.402f,0.390f,1.000f,()->send("LEFT_CLICK"));
+                addDragArea(0.390f,0.402f,1.000f,1.000f);
+            }
+        }
+        private void addHit(float l,float t,float r,float b,Runnable action) {
+            View v = new View(MainActivity.this);
+            v.setBackgroundColor(Color.TRANSPARENT);
+            v.setOnClickListener(w -> action.run());
+            addView(v);
+            hitList.add(new Hit(v,l,t,r,b));
+        }
+        private void addDragArea(float l,float t,float r,float b) {
+            View v = new View(MainActivity.this);
+            v.setBackgroundColor(Color.TRANSPARENT);
+            v.setOnTouchListener((view,e)->{
+                try {
+                    switch(e.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            touchX=(int)e.getX(); touchY=(int)e.getY();
+                            view.getParent().requestDisallowInterceptTouchEvent(true);
+                            return true;
+                        case MotionEvent.ACTION_MOVE:
+                            if(connected) {
+                                int x=(int)e.getX(), y=(int)e.getY();
+                                int dx=x-touchX, dy=y-touchY; touchX=x; touchY=y;
+                                if(dx!=0 || dy!=0) queueMove(dx,dy);
+                            } else { touchX=(int)e.getX(); touchY=(int)e.getY(); }
+                            return true;
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL:
+                            view.getParent().requestDisallowInterceptTouchEvent(false);
+                            return true;
+                        default: return true;
+                    }
+                } catch(RuntimeException ex) { return true; }
+            });
+            addView(v);
+            hitList.add(new Hit(v,l,t,r,b));
+        }
+        @Override protected void onMeasure(int wSpec,int hSpec) {
+            int w=MeasureSpec.getSize(wSpec), h=MeasureSpec.getSize(hSpec);
+            setMeasuredDimension(w,h);
+            for(Hit hitem:hitList) hitem.view.measure(MeasureSpec.makeMeasureSpec(Math.max(0,(int)(w*(hitem.r-hitem.l))),MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(Math.max(0,(int)(h*(hitem.b-hitem.t))),MeasureSpec.EXACTLY));
+        }
+        @Override protected void onLayout(boolean changed,int l,int t,int r,int b) {
+            int w=r-l,h=b-t;
+            for(Hit it:hitList) it.view.layout((int)(w*it.l),(int)(h*it.t),(int)(w*it.r),(int)(h*it.b));
+        }
+        private class Hit {
+            View view; float l,t,r,b;
+            Hit(View v,float l,float t,float r,float b){this.view=v;this.l=l;this.t=t;this.r=r;this.b=b;}
+        }
+    }
+
     private void connectToTarget() {
         String ip=ipInput.getText().toString().trim();
         if(ip.isEmpty()){Toast.makeText(this,"آدرس IP گوشی موس را وارد کن",Toast.LENGTH_SHORT).show();return;}

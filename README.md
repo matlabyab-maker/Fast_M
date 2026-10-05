@@ -25,3 +25,7 @@
 
 ## وضعیت تحویل
 این بسته شامل سورس پروژه و گردش‌کار ساخت APK است. در این محیط Android SDK و Gradle نصب نبودند؛ بنابراین APK ساخته و روی گوشی واقعی آزمایش نشده است. پس از Push به GitHub، نتیجهٔ workflow و سپس عملکرد دو گوشی باید بررسی شود.
+
+
+## Reference-image remote UI
+The controller screen now displays the two supplied reference images as full-screen backgrounds. Transparent hit areas are placed over the pictured controls; Menu 1/Menu 2 switch between the two layouts. Page Up/Down send scroll commands, Back sends the Android Back command, Left Click sends a click, and Drag sends relative pointer movement. The Copy/Past and Point Zoom regions are visual hit areas only in this build because their receiver-side functions were not present in the supplied command handler. The package has not been built or tested on physical phones.
