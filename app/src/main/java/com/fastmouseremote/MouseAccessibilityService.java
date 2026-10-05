@@ -44,24 +44,35 @@ public class MouseAccessibilityService extends AccessibilityService {
         cursor.setShadowLayer(4,1,1,Color.BLACK);
         cursor.setRotation(-45f);
         cursor.setGravity(Gravity.CENTER);lp=new LayoutParams(42,42,LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,LayoutParams.FLAG_NOT_FOCUSABLE|LayoutParams.FLAG_NOT_TOUCHABLE|LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);lp.gravity=Gravity.TOP|Gravity.LEFT;lp.x=Math.max(0,Math.min(screenW-42,x-8));lp.y=Math.max(0,Math.min(screenH-42,y-8));wm.addView(cursor,lp);}catch(Exception e){cursor=null;}}
-    public void moveCursor(int dx,int dy){handler.post(()->{// Use the full physical display bounds, including status and navigation-bar areas.
-            x=Math.max(1,Math.min(screenW-1,x+dx*2));
-            y=Math.max(1,Math.min(screenH-1,y+dy*2));if(cursor==null)showCursor();if(cursor!=null&&lp!=null){lp.x=Math.max(0,Math.min(screenW-42,x-8));
-            lp.y=Math.max(0,Math.min(screenH-42,y-8));
+    public void moveCursor(int dx, int dy) {
+        handler.post(() -> {
+            x = Math.max(1, Math.min(screenW - 1, x + dx * 2));
+            y = Math.max(1, Math.min(screenH - 1, y + dy * 2));
+            if (cursor == null || lp == null) {
+                showCursor();
+            }
+            if (cursor == null || lp == null) return;
+
+            lp.x = Math.max(0, Math.min(screenW - 42, x - 8));
+            lp.y = Math.max(0, Math.min(screenH - 42, y - 8));
             try {
                 if (cursor.getParent() == null) {
                     cursor = null;
+                    lp = null;
                     showCursor();
                 } else {
-                    wm.updateViewLayout(cursor,lp);
+                    wm.updateViewLayout(cursor, lp);
                 }
             } catch (Exception ignored) {
-                // The overlay may have been detached while the TCP socket remains alive.
-                try { if (cursor != null && cursor.getParent() != null) wm.removeView(cursor); } catch (Exception ignored2) {}
+                try {
+                    if (cursor != null && cursor.getParent() != null) wm.removeView(cursor);
+                } catch (Exception ignored2) { }
                 cursor = null;
                 lp = null;
                 showCursor();
-            }}); }
+            }
+        });
+    }
     public void click(boolean longPress){handler.post(()->{Path p=new Path();p.moveTo(x,y);GestureDescription.StrokeDescription stroke=new GestureDescription.StrokeDescription(p,0,longPress?850:70);dispatchGesture(new GestureDescription.Builder().addStroke(stroke).build(),null,null);});}
     public void scroll(int direction){handler.post(()->{Path p=new Path();p.moveTo(x,y);p.lineTo(x,y+(direction<0?-Math.min(420,screenH/3):Math.min(420,screenH/3)));dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(p,0,350)).build(),null,null);});}
     public void goBack(){handler.post(()->performGlobalAction(GLOBAL_ACTION_BACK));}
