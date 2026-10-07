@@ -15,7 +15,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class RemoteServerService extends Service {
-    public static final int PORT = 8080;
+    public static final int PORT = 47821;
     private volatile boolean running = false;
     private volatile ServerSocket server;
 
