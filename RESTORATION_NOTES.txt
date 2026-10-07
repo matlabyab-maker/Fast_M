@@ -1,0 +1,6 @@
+Fast_M restoration
+- Base selected from fastm_current/Fast_M.zip because it contains the cursor overlay watchdog.
+- Preserved pointer overlay and reconnect/navigation code.
+- Applied aligned Menu 2 touch hit regions.
+- Restored expanded Menu 3 keyboard-side controls.
+- No ACTION_SELECT_ALL reference remains.

@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
     private final Object moveLock = new Object();
     private int pendingMoveX, pendingMoveY;
     private boolean moveWorkerRunning = false;
-    private static final int PORT = 47821;
+    private static final int PORT = 8080;
     private static final String PREFS_NAME = "FastMSettings";
     private static final String KEY_TARGET_IP = "last_target_ip";
 
@@ -258,64 +258,53 @@ public class MainActivity extends Activity {
             keyboard.addView(row,new LinearLayout.LayoutParams(-1,0,ri==0?0.8f:1f));
         }
 
-        // Menu 3 side panel: navigation and explicit Android system controls.
-        // System actions are sent as distinct protocol commands; they never map to CLICK_LEFT.
-        LinearLayout panel = new LinearLayout(this);
+        // Menu 3 right panel: explicit controls. None of these actions are mapped to left click.
+        LinearLayout panel=new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(3), dp(3), dp(3), dp(3));
+        panel.setPadding(dp(3),dp(3),dp(3),dp(3));
         panel.setBackgroundColor(Color.rgb(173,218,232));
-        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
-        plp.leftMargin = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(panel, plp);
+        FrameLayout.LayoutParams plp=new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
+        plp.leftMargin=(int)(getResources().getDisplayMetrics().widthPixels*0.74f);
+        screen.addView(panel,plp);
 
-        Button menu1 = keyboardKey("Menu 1", 15, Color.rgb(255,190,70));
-        panel.addView(menu1,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu1.setOnClickListener(v -> showRemoteImage(false));
+        Button menu1=keyboardKey("Menu 1",15,Color.rgb(255,190,70));
+        panel.addView(menu1,new LinearLayout.LayoutParams(-1,0,0.72f));
+        menu1.setOnClickListener(v->showRemoteImage(false));
 
-        Button menu2 = keyboardKey("Menu 2", 15, Color.rgb(255,190,70));
-        panel.addView(menu2,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu2.setOnClickListener(v -> showRemoteImage(true));
+        Button menu2=keyboardKey("Menu 2",15,Color.rgb(255,190,70));
+        panel.addView(menu2,new LinearLayout.LayoutParams(-1,0,0.72f));
+        menu2.setOnClickListener(v->showRemoteImage(true));
 
-        Button notifications = keyboardKey("نوار بالا", 14, Color.rgb(245,225,150));
-        panel.addView(notifications,new LinearLayout.LayoutParams(-1,0,0.85f));
-        notifications.setOnClickListener(v -> send("NOTIFICATIONS"));
+        Button notifications=keyboardKey("نوار بالا",14,Color.rgb(245,225,150));
+        panel.addView(notifications,new LinearLayout.LayoutParams(-1,0,0.82f));
+        notifications.setOnClickListener(v->send("NOTIFICATIONS"));
 
-        Button quick = keyboardKey("تنظیمات سریع", 13, Color.rgb(245,225,150));
-        panel.addView(quick,new LinearLayout.LayoutParams(-1,0,0.85f));
-        quick.setOnClickListener(v -> send("QUICK_SETTINGS"));
+        Button quick=keyboardKey("تنظیمات سریع",13,Color.rgb(245,225,150));
+        panel.addView(quick,new LinearLayout.LayoutParams(-1,0,0.82f));
+        quick.setOnClickListener(v->send("QUICK_SETTINGS"));
 
-        Button home = keyboardKey("خانه", 15, Color.rgb(210,235,200));
-        panel.addView(home,new LinearLayout.LayoutParams(-1,0,0.75f));
-        home.setOnClickListener(v -> send("HOME"));
+        Button home=keyboardKey("خانه",15,Color.rgb(210,235,200));
+        panel.addView(home,new LinearLayout.LayoutParams(-1,0,0.72f));
+        home.setOnClickListener(v->send("HOME"));
 
-        Button back = keyboardKey("بازگشت", 15, Color.rgb(210,235,200));
-        panel.addView(back,new LinearLayout.LayoutParams(-1,0,0.75f));
-        back.setOnClickListener(v -> send("BACK"));
+        Button back=keyboardKey("بازگشت",15,Color.rgb(210,235,200));
+        panel.addView(back,new LinearLayout.LayoutParams(-1,0,0.72f));
+        back.setOnClickListener(v->send("BACK"));
 
-        Button recent = keyboardKey("برنامه‌های اخیر", 12, Color.rgb(210,235,200));
-        panel.addView(recent,new LinearLayout.LayoutParams(-1,0,0.75f));
-        recent.setOnClickListener(v -> send("RECENTS"));
+        Button recent=keyboardKey("برنامه‌های اخیر",12,Color.rgb(210,235,200));
+        panel.addView(recent,new LinearLayout.LayoutParams(-1,0,0.72f));
+        recent.setOnClickListener(v->send("RECENTS"));
 
-        Button click = keyboardKey("Left Click", 16, Color.rgb(239,143,218));
-        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.85f));
-        click.setOnClickListener(v -> send("CLICK_LEFT"));
-
-        TextView touch = new TextView(this);
-        touch.setText("Touch / Drag");
-        touch.setTextSize(15);
-        touch.setTextColor(Color.rgb(76,53,74));
-        touch.setGravity(Gravity.CENTER);
-        touch.setBackground(bg(Color.rgb(173,218,232),0));
-        panel.addView(touch,new LinearLayout.LayoutParams(-1,0,1.15f));
-        final int[] last = {0,0};
-        touch.setOnTouchListener((v,e) -> {
-            if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
-                last[0]=(int)e.getX(); last[1]=(int)e.getY(); return true;
-            }
-            if (e.getActionMasked()==MotionEvent.ACTION_MOVE && connected) {
+        Button click=keyboardKey("Left Click",16,Color.rgb(239,143,218));
+        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.82f));
+        click.setOnClickListener(v->send("CLICK_LEFT"));
+        final int[] last={0,0};
+        touch.setOnTouchListener((v,e)->{
+            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){last[0]=(int)e.getX();last[1]=(int)e.getY();return true;}
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE && connected){
                 int x=(int)e.getX(), y=(int)e.getY();
-                int dx=x-last[0], dy=y-last[1]; last[0]=x; last[1]=y;
-                if (dx!=0 || dy!=0) queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
+                int dx=x-last[0],dy=y-last[1];last[0]=x;last[1]=y;
+                if(dx!=0||dy!=0)queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
                 return true;
             }
             return e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL;
@@ -425,29 +414,24 @@ public class MainActivity extends Activity {
                 addHit(0.724f,0.263f,1.000f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.326f,0.263f,0.724f,1.000f);
             } else {
-                // Menu 2 image coordinates are aligned to the visible button boundaries.
-                // Top row: Menu 2 / Back; second row: Page Up / Page Down.
+                // Menu 2 image coordinates aligned to the visible button boundaries.
                 addHit(0.00f,0.00f,0.195f,0.150f,()->showRemoteImage(false));
                 addHit(0.195f,0.00f,0.390f,0.150f,()->send("BACK"));
                 addHit(0.00f,0.150f,0.195f,0.390f,()->send("SCROLL -1"));
                 addHit(0.195f,0.150f,0.390f,0.390f,()->send("SCROLL 1"));
-                // Left Click and Drag are separated by the visible vertical divider.
                 addHit(0.00f,0.390f,0.390f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.390f,0.390f,1.000f,1.000f);
-                // Keep the third-scene shortcut in a small, otherwise-empty top-right area.
+                // Third-scene shortcut remains in an otherwise empty upper-right area.
                 addHit(0.820f,0.000f,0.985f,0.140f,()->showKeyboardRemote());
             }
         }
         private void flashTap(View v) {
-            final android.graphics.drawable.Drawable old = v.getBackground();
+            android.graphics.drawable.Drawable old = v.getBackground();
             android.graphics.drawable.GradientDrawable glow = new android.graphics.drawable.GradientDrawable();
-            glow.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            glow.setColor(Color.argb(150, 255, 225, 0));
+            glow.setColor(Color.argb(190, 255, 225, 0));
             glow.setStroke(dp(2), Color.rgb(255, 190, 0));
             v.setBackground(glow);
-            v.postDelayed(() -> {
-                if (v.getParent() != null) v.setBackground(old);
-            }, 160);
+            v.postDelayed(() -> v.setBackground(old), 180);
         }
 
         private void addHit(float l,float t,float r,float b,Runnable action) {
