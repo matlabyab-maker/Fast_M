@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
         root.addView(text("موس مستقل اندروید با کنترل از گوشی دوم\nاتصال محلی Wi-Fi / هات‌اسپات — بدون اینترنت",16),params(-1,-2,0,0,0,18));
         button("این گوشی: دستگاه هدف (موس)", this::showTarget);
         button("این گوشی: کنترلر / ریموت", this::showController);
+        button("تنظیمات دسترسی و مجوزها", this::showAccessSettings);
         root.addView(text("برنامه را روی هر دو گوشی نصب کن. گوشی‌ها باید به یک شبکهٔ Wi-Fi یا هات‌اسپات وصل باشند.",14),params(-1,-2,0,16,0,0));
     }
     private void showTarget() {
@@ -97,6 +98,7 @@ public class MainActivity extends Activity {
         button("باز کردن تنظیمات Accessibility", () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         root.addView(text("۲) برای نمایش نشانگر شناور، مجوز نمایش روی برنامه‌های دیگر را فعال کن.",15),params(-1,-2,0,10,0,4));
         button("مجوز نمایش روی برنامه‌ها", () -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)));
+        button("تنظیمات دسترسی و مجوزهای کامل", this::showAccessSettings);
         String ip=getLocalIp();
         root.addView(text("آدرس این گوشی: "+ip+"\nدرگاه TCP: "+PORT+"\nگوشی ریموت باید همین IP و درگاه را استفاده کند.",18),params(-1,-2,0,18,0,12));
         button("شروع پذیرش اتصال ریموت", () -> {
@@ -107,6 +109,43 @@ public class MainActivity extends Activity {
         button("توقف سرویس موس", () -> { stopService(new Intent(this,RemoteServerService.class)); Toast.makeText(this,"سرویس متوقف شد",Toast.LENGTH_SHORT).show(); });
         button("بازگشت",this::showHome);
     }
+    private void showAccessSettings() {
+        setup("تنظیمات دسترسی و مجوزها");
+        root.addView(text("دسترسی‌های مورد استفادهٔ Fast M را از همین بخش مدیریت کن. هر گزینه مستقیماً صفحهٔ تنظیمات مربوط به خودش را باز می‌کند.",15),
+                params(-1,-2,0,0,0,10));
+        button("Accessibility / دسترس‌پذیری",
+                () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        button("نمایش روی برنامه‌های دیگر",
+                () -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)));
+        button("Usage Access / دسترسی استفاده",
+                () -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
+        button("اعلان‌های برنامه",
+                () -> {
+                    Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                    i.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+                    startActivity(i);
+                });
+        if (android.os.Build.VERSION.SDK_INT >= 23) {
+            button("باتری / عدم محدودیت فعالیت",
+                    () -> {
+                        try {
+                            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                            i.setData(android.net.Uri.parse("package:" + getPackageName()));
+                            startActivity(i);
+                        } catch (Exception e) {
+                            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                        }
+                    });
+        }
+        button("اطلاعات و مجوزهای خود برنامه",
+                () -> {
+                    Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    i.setData(android.net.Uri.parse("package:" + getPackageName()));
+                    startActivity(i);
+                });
+        button("بازگشت", this::showHome);
+    }
+
     private String getLocalIp() {
         try { WifiManager wm=(WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE); int ip=wm.getConnectionInfo().getIpAddress(); String s=Formatter.formatIpAddress(ip); if(!"0.0.0.0".equals(s)) return s; } catch(Exception ignored) {}
         return "IP را از جزئیات شبکهٔ Wi-Fi بررسی کن";
@@ -188,140 +227,193 @@ public class MainActivity extends Activity {
 
         RemoteHitLayout hits = new RemoteHitLayout();
         canvas.addView(hits, new FrameLayout.LayoutParams(-1, -1));
-        // Two slim vertical controls in the otherwise empty right-hand area.
-        addVerticalControl(canvas, "حساسیت", true, sensitivity, 0.925f);
-        addVerticalControl(canvas, "سرعت", false, pointerSpeed, 0.965f);
+        Button keyboardShortcut = keyboardKey("⌨ کیبورد", 13, Color.rgb(255,247,224));
+        FrameLayout.LayoutParams kp = new FrameLayout.LayoutParams(dp(105), dp(38), Gravity.TOP|Gravity.RIGHT);
+        kp.topMargin = dp(42); kp.rightMargin = dp(5);
+        canvas.addView(keyboardShortcut, kp);
+        keyboardShortcut.setOnClickListener(v -> showKeyboardRemote());
+        addHorizontalControls(canvas);
         setContentView(canvas);
     }
 
 
 
     // Menu 3: large Fast Keyboard-style panel on the left and mouse controls on the right.
+    /**
+     * سین کیبورد — مرجع قطعی:
+     * تصویر keyboard_reference.jpg همان تصویر ارسالی کاربر است.
+     * هیچ بازطراحی یا جابه‌جایی دکمه‌ای انجام نمی‌شود؛ فقط Hotspot شفاف
+     * روی مختصات خود تصویر قرار می‌گیرد تا ظاهر دقیقاً همان تصویر بماند.
+     */
     private void showKeyboardRemote() {
+        final int W = 1665;
+        final int H = 953;
+
         FrameLayout screen = new FrameLayout(this);
         screen.setBackgroundColor(Color.rgb(173,218,232));
 
-        LinearLayout keyboard = new LinearLayout(this);
-        keyboard.setOrientation(LinearLayout.VERTICAL);
-        keyboard.setPadding(dp(5),dp(5),dp(5),dp(5));
-        keyboard.setBackgroundColor(Color.rgb(173,218,232));
-        FrameLayout.LayoutParams klp = new FrameLayout.LayoutParams(0,-1,Gravity.LEFT);
-        klp.width = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(keyboard,klp);
+        ImageView reference = new ImageView(this);
+        reference.setImageResource(R.drawable.keyboard_reference);
+        reference.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        reference.setAdjustViewBounds(false);
+        FrameLayout.LayoutParams imageLp = new FrameLayout.LayoutParams(-1,-1);
+        screen.addView(reference,imageLp);
 
-        // Three live suggestion slots, deliberately full-width and easy to tap.
-        LinearLayout suggestions = new LinearLayout(this);
-        suggestions.setOrientation(LinearLayout.HORIZONTAL);
-        String[] suggested = {"سلام","خوب","بله"};
-        for(String word:suggested) {
-            Button b = keyboardKey(word, 16, Color.rgb(255,247,224));
-            b.setOnClickListener(v -> sendText(word));
-            suggestions.addView(b,new LinearLayout.LayoutParams(0,dp(48),1));
+        // مختصات Hotspotها بر اساس دقیقاً همان تصویر 1665×953 هستند.
+        // محاسبهٔ مقیاس و حاشیهٔ FIT_CENTER در addReferenceHotspot انجام می‌شود.
+
+        // ردیف بالایی
+        addReferenceHotspot(screen,0,0,122,145, () -> send("PASTE"));
+        addReferenceHotspot(screen,122,0,243,145, () -> send("COPY_ALL"));
+        addReferenceHotspot(screen,243,0,365,145, () -> send("COPY_SCREEN"));
+        addReferenceHotspot(screen,365,0,486,145, () -> send("CUT"));
+        addReferenceHotspot(screen,486,0,607,145, () -> send("UNDO"));
+        addReferenceHotspot(screen,607,0,729,145, () -> send("REDO"));
+        addReferenceHotspot(screen,729,0,850,145, () -> send("HISTORY"));
+        addReferenceHotspot(screen,850,0,972,145, () -> showAccessSettings());
+        addReferenceHotspot(screen,972,0,1093,145, () -> showKeyboardRemote());
+        addReferenceHotspot(screen,1093,0,1217,145, () -> showRemoteImage(false));
+
+        // ردیف واژه‌های فارسی
+        addReferenceHotspot(screen,0,145,153,258, () -> sendText("دکمه"));
+        addReferenceHotspot(screen,153,145,304,258, () -> sendText("و"));
+        addReferenceHotspot(screen,304,145,455,258, () -> sendText("در"));
+        addReferenceHotspot(screen,455,145,607,258, () -> sendText("را"));
+        addReferenceHotspot(screen,607,145,758,258, () -> sendText("همان"));
+        addReferenceHotspot(screen,758,145,910,258, () -> sendText("که"));
+        addReferenceHotspot(screen,910,145,1061,258, () -> sendText("ارسال"));
+        addReferenceHotspot(screen,1061,145,1217,258, () -> sendText("فایل"));
+
+        // اعداد و نمادها
+        String[] nums={"۱","۲","۳","۴","۵","۶","۷","۸","۹","۰"};
+        int[] nx={0,106,211,317,423,528,634,740,846,951};
+        for(int i=0;i<10;i++){
+            final String key=nums[i];
+            int x1=nx[i], x2=(i==9?1060:nx[i+1]);
+            addReferenceHotspot(screen,x1,258,x2,389,()->sendText(key));
         }
-        keyboard.addView(suggestions,new LinearLayout.LayoutParams(-1,dp(48)));
+        addReferenceHotspot(screen,1060,258,1217,389,()->send("KEY_BACKSPACE"));
 
-        String[][] rows = {
-            {"Copy","Paste","Undo","Redo","امکانات"},
-            {"1","2","3","4","5","6","7","8","9","0","-","="},
-            {"Q","W","E","R","T","Y","U","I","O","P","[","]"},
-            {"A","S","D","F","G","H","J","K","L",";","'","⌫"},
-            {"Shift","Z","X","C","V","B","N","M",",",".","/","Enter"},
-            {"Ctrl","Alt","Space","←","↓","↑","→"}
-        };
-        for(int ri=0;ri<rows.length;ri++) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            for(String key:rows[ri]) {
-                Button b=keyboardKey(key,ri==0?13:17,Color.rgb(255,248,230));
-                LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-1,1f);
-                bp.setMargins(dp(2),dp(3),dp(2),dp(3));
-                row.addView(b,bp);
-                b.setOnClickListener(v -> {
-                    switch(key) {
-                        case "Copy": send("COPY"); break;
-                        case "Paste": send("PASTE"); break;
-                        case "Undo": send("UNDO"); break;
-                        case "Redo": send("REDO"); break;
-                        case "امکانات": showRemoteImage(false); break;
-                        case "Space": sendText(" "); break;
-                        case "Enter": sendText("\n"); break;
-                        case "⌫": send("KEY_BACKSPACE"); break;
-                        case "Shift": break;
-                        case "Ctrl": case "Alt": break;
-                        case "←": send("MOVE -18 0"); break;
-                        case "→": send("MOVE 18 0"); break;
-                        case "↑": send("MOVE 0 -18"); break;
-                        case "↓": send("MOVE 0 18"); break;
-                        default: sendText(key);
-                    }
-                });
-            }
-            keyboard.addView(row,new LinearLayout.LayoutParams(-1,0,ri==0?0.8f:1f));
+        // حروف فارسی ردیف 1
+        String[] r1={"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"};
+        for(int i=0;i<r1.length;i++){
+            final String key=r1[i];
+            addReferenceHotspot(screen,i*100,389,(i+1)*100,520,()->sendText(key));
+        }
+        // Enter
+        addReferenceHotspot(screen,1095,389,1217,651,()->sendText("\n"));
+
+        // حروف فارسی ردیف 2
+        String[] r2={"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"};
+        for(int i=0;i<r2.length;i++){
+            final String key=r2[i];
+            addReferenceHotspot(screen,i*100,520,(i+1)*100,651,()->sendText(key));
         }
 
-        // Menu 3 side panel: navigation and explicit Android system controls.
-        // System actions are sent as distinct protocol commands; they never map to CLICK_LEFT.
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(3), dp(3), dp(3), dp(3));
-        panel.setBackgroundColor(Color.rgb(173,218,232));
-        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
-        plp.leftMargin = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(panel, plp);
+        // Caps + ردیف فارسی سوم
+        addReferenceHotspot(screen,0,651,121,783,()->send("CAPS"));
+        String[] r3={"ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ"};
+        int[] rx={121,230,339,448,557,666,775,884,993,1095};
+        for(int i=0;i<r3.length;i++){
+            final String key=r3[i];
+            int x1=rx[i], x2=(i==9?1217:rx[i+1]);
+            addReferenceHotspot(screen,x1,651,x2,783,()->sendText(key));
+        }
+        addReferenceHotspot(screen,1095,651,1217,783,()->sendText("؟"));
 
-        Button menu1 = keyboardKey("Menu 1", 15, Color.rgb(255,190,70));
-        panel.addView(menu1,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu1.setOnClickListener(v -> showRemoteImage(false));
+        // ردیف پایین
+        addReferenceHotspot(screen,0,783,91,953,()->send("WAVE"));
+        addReferenceHotspot(screen,91,783,218,953,()->sendText("123"));
+        addReferenceHotspot(screen,218,783,324,953,()->send("FA"));
+        addReferenceHotspot(screen,324,783,582,953,()->sendText(" "));
+        addReferenceHotspot(screen,582,783,660,953,()->sendText("،"));
+        addReferenceHotspot(screen,660,783,740,953,()->sendText("."));
+        addReferenceHotspot(screen,740,783,818,953,()->sendText("♦"));
+        addReferenceHotspot(screen,818,783,925,953,()->send("MOVE -18 0"));
+        addReferenceHotspot(screen,925,783,1031,953,()->send("MOVE 18 0"));
+        addReferenceHotspot(screen,1031,783,1124,953,()->send("MOVE 0 -18"));
+        addReferenceHotspot(screen,1124,783,1217,953,()->send("MOVE 0 18"));
 
-        Button menu2 = keyboardKey("Menu 2", 15, Color.rgb(255,190,70));
-        panel.addView(menu2,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu2.setOnClickListener(v -> showRemoteImage(true));
+        // پنل Menu 3 — دقیقاً سمت راست عکس
+        addReferenceHotspot(screen,1218,0,1665,125,()->showKeyboardRemote());
+        addReferenceHotspot(screen,1218,125,1665,303,()->clickLeftFromReference());
+        addReferenceTouchHotspot(screen,1218,303,1665,928);
+        addReferenceHotspot(screen,1218,928,1665,953,()->showAccessSettings());
 
-        Button notifications = keyboardKey("نوار بالا", 14, Color.rgb(245,225,150));
-        panel.addView(notifications,new LinearLayout.LayoutParams(-1,0,0.85f));
-        notifications.setOnClickListener(v -> send("NOTIFICATIONS"));
+        setContentView(screen);
+    }
 
-        Button quick = keyboardKey("تنظیمات سریع", 13, Color.rgb(245,225,150));
-        panel.addView(quick,new LinearLayout.LayoutParams(-1,0,0.85f));
-        quick.setOnClickListener(v -> send("QUICK_SETTINGS"));
+    private void clickLeftFromReference() {
+        if (!connected) {
+            Toast.makeText(this,"ابتدا اتصال را برقرار کنید",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        send("CLICK_LEFT");
+    }
 
-        Button home = keyboardKey("خانه", 15, Color.rgb(210,235,200));
-        panel.addView(home,new LinearLayout.LayoutParams(-1,0,0.75f));
-        home.setOnClickListener(v -> send("HOME"));
+    private void addReferenceHotspot(FrameLayout root, int x1,int y1,int x2,int y2, final Runnable action) {
+        View hit = new View(this);
+        hit.setBackgroundColor(Color.TRANSPARENT);
+        hit.setClickable(true);
+        hit.setOnClickListener(v -> action.run());
+        root.addView(hit,new FrameLayout.LayoutParams(Math.max(1,x2-x1),Math.max(1,y2-y1)));
+        hit.setTag(new int[]{x1,y1,x2,y2});
+        hit.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            FrameLayout parent=(FrameLayout)v.getParent();
+            int pw=parent.getWidth(), ph=parent.getHeight();
+            if(pw<=0||ph<=0)return;
+            float scale=Math.min((float)pw/1665f,(float)ph/953f);
+            float ox=(pw-1665f*scale)/2f, oy=(ph-953f*scale)/2f;
+            FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)v.getLayoutParams();
+            int[] q=(int[])v.getTag();
+            lp.width=Math.max(1,Math.round((q[2]-q[0])*scale));
+            lp.height=Math.max(1,Math.round((q[3]-q[1])*scale));
+            lp.leftMargin=Math.round(ox+q[0]*scale);
+            lp.topMargin=Math.round(oy+q[1]*scale);
+            v.setLayoutParams(lp);
+        });
+    }
 
-        Button back = keyboardKey("بازگشت", 15, Color.rgb(210,235,200));
-        panel.addView(back,new LinearLayout.LayoutParams(-1,0,0.75f));
-        back.setOnClickListener(v -> send("BACK"));
-
-        Button recent = keyboardKey("برنامه‌های اخیر", 12, Color.rgb(210,235,200));
-        panel.addView(recent,new LinearLayout.LayoutParams(-1,0,0.75f));
-        recent.setOnClickListener(v -> send("RECENTS"));
-
-        Button click = keyboardKey("Left Click", 16, Color.rgb(239,143,218));
-        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.85f));
-        click.setOnClickListener(v -> send("CLICK_LEFT"));
-
-        dragTouchView = new TextView(this);
-        dragTouchView.setText("Touch / Drag");
-        dragTouchView.setTextSize(15);
-        dragTouchView.setTextColor(Color.rgb(76,53,74));
-        dragTouchView.setGravity(Gravity.CENTER);
-        dragTouchView.setBackground(bg(Color.rgb(173,218,232),0));
-        panel.addView(dragTouchView,new LinearLayout.LayoutParams(-1,0,1.15f));
-        final int[] last = {0,0};
-        dragTouchView.setOnTouchListener((v,e) -> {
-            if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
-                last[0]=(int)e.getX(); last[1]=(int)e.getY(); return true;
-            }
-            if (e.getActionMasked()==MotionEvent.ACTION_MOVE && connected) {
-                int x=(int)e.getX(), y=(int)e.getY();
-                int dx=x-last[0], dy=y-last[1]; last[0]=x; last[1]=y;
-                if (dx!=0 || dy!=0) queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
+    private void addReferenceTouchHotspot(FrameLayout root, int x1,int y1,int x2,int y2) {
+        View touch = new View(this);
+        touch.setBackgroundColor(Color.TRANSPARENT);
+        root.addView(touch,new FrameLayout.LayoutParams(1,1));
+        touch.setTag(new int[]{x1,y1,x2,y2});
+        touch.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            FrameLayout parent=(FrameLayout)v.getParent();
+            int pw=parent.getWidth(), ph=parent.getHeight();
+            if(pw<=0||ph<=0)return;
+            float scale=Math.min((float)pw/1665f,(float)ph/953f);
+            float ox=(pw-1665f*scale)/2f, oy=(ph-953f*scale)/2f;
+            int[] q=(int[])v.getTag();
+            FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)v.getLayoutParams();
+            lp.width=Math.max(1,Math.round((q[2]-q[0])*scale));
+            lp.height=Math.max(1,Math.round((q[3]-q[1])*scale));
+            lp.leftMargin=Math.round(ox+q[0]*scale);
+            lp.topMargin=Math.round(oy+q[1]*scale);
+            v.setLayoutParams(lp);
+        });
+        final int[] last={0,0};
+        touch.setOnTouchListener((v,e)->{
+            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
+                last[0]=(int)e.getX(); last[1]=(int)e.getY();
+                v.getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             }
-            return e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL;
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE){
+                int x=(int)e.getX(), y=(int)e.getY();
+                int dx=x-last[0],dy=y-last[1];
+                last[0]=x;last[1]=y;
+                if(connected&&(dx!=0||dy!=0))
+                    queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
+                return true;
+            }
+            if(e.getActionMasked()==MotionEvent.ACTION_UP||e.getActionMasked()==MotionEvent.ACTION_CANCEL){
+                v.getParent().requestDisallowInterceptTouchEvent(false);
+                return true;
+            }
+            return true;
         });
-        setContentView(screen);
     }
 
     private Button keyboardKey(String label,int size,int color) {
@@ -342,70 +434,45 @@ public class MainActivity extends Activity {
         send("TEXT "+encoded);
     }
 
-    private void addVerticalControl(FrameLayout canvas, String label, boolean isSensitivity,
-                                    float initialValue, float xFraction) {
-        VerticalControl control = new VerticalControl(label, isSensitivity, initialValue);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(24), dp(150),
-                Gravity.TOP | Gravity.RIGHT);
-        lp.topMargin = 0;
-        lp.rightMargin = dp(isSensitivity ? 30 : 2); // consecutive slim rails, aligned to the top edge
-        canvas.addView(control, lp);
+    private void addHorizontalControls(FrameLayout canvas) {
+        HorizontalControl sensitivityControl = new HorizontalControl("حساسیت", true, sensitivity);
+        HorizontalControl speedControl = new HorizontalControl("سرعت", false, pointerSpeed);
+        int width=dp(120), height=dp(38);
+        FrameLayout.LayoutParams p1=new FrameLayout.LayoutParams(width,height,Gravity.TOP|Gravity.RIGHT);
+        p1.topMargin=dp(2); p1.rightMargin=dp(4); canvas.addView(speedControl,p1);
+        FrameLayout.LayoutParams p2=new FrameLayout.LayoutParams(width,height,Gravity.TOP|Gravity.RIGHT);
+        p2.topMargin=dp(2); p2.rightMargin=dp(128); canvas.addView(sensitivityControl,p2);
     }
 
-    private class VerticalControl extends View {
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final String label;
-        private final boolean isSensitivity;
-        private float value;
-        private float downY;
-        private final int minValue = 1, maxValue = 5;
-
-        VerticalControl(String label, boolean isSensitivity, float initialValue) {
-            super(MainActivity.this);
-            this.label = label;
-            this.isSensitivity = isSensitivity;
-            this.value = Math.max(minValue, Math.min(maxValue, initialValue));
-            setContentDescription(label);
-            setBackgroundColor(Color.argb(35, 0, 0, 0));
+    private class HorizontalControl extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final String label; private final boolean isSensitivity;
+        private float value; private final int minValue=1,maxValue=5;
+        HorizontalControl(String label,boolean isSensitivity,float initialValue){
+            super(MainActivity.this); this.label=label; this.isSensitivity=isSensitivity;
+            value=Math.max(minValue,Math.min(maxValue,initialValue));
+            setContentDescription(label); setBackgroundColor(Color.argb(115,245,247,251));
         }
-
-        @Override protected void onDraw(Canvas c) {
-            super.onDraw(c);
-            float cx = getWidth()/2f;
-            float top = dp(28), bottom = getHeight()-dp(10);
-            paint.setStrokeWidth(dp(3));
-            paint.setColor(Color.rgb(70,70,70));
-            c.drawLine(cx, top, cx, bottom, paint);
-            float fraction = (value-minValue)/(float)(maxValue-minValue);
-            float thumbY = bottom - fraction*(bottom-top);
-            paint.setColor(isSensitivity ? Color.rgb(220,40,140) : Color.rgb(20,110,220));
-            c.drawCircle(cx, thumbY, dp(7), paint);
-            paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTextSize(dp(10));
-            paint.setColor(Color.rgb(35,35,35));
-            c.drawText(isSensitivity ? "حس" : "سر", cx, dp(12), paint);
-            c.drawText(String.valueOf(Math.round(value)), cx, getHeight()-dp(1), paint);
+        @Override protected void onDraw(Canvas c){
+            super.onDraw(c); float left=dp(10),right=getWidth()-dp(10),cy=getHeight()/2f+dp(7);
+            paint.setStrokeWidth(dp(3)); paint.setColor(Color.rgb(70,70,70)); c.drawLine(left,cy,right,cy,paint);
+            float f=(value-minValue)/(float)(maxValue-minValue), tx=left+f*(right-left);
+            paint.setColor(isSensitivity?Color.rgb(220,40,140):Color.rgb(20,110,220)); c.drawCircle(tx,cy,dp(7),paint);
+            paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(dp(10)); paint.setColor(Color.rgb(35,35,35));
+            c.drawText(label+" "+Math.round(value),getWidth()/2f,dp(12),paint);
         }
-
-        @Override public boolean onTouchEvent(MotionEvent e) {
-            if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
-                downY=e.getY(); updateValue(e.getY()); getParent().requestDisallowInterceptTouchEvent(true); return true;
-            }
-            if (e.getActionMasked()==MotionEvent.ACTION_MOVE) { updateValue(e.getY()); return true; }
-            if (e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL) {
-                updateValue(e.getY()); getParent().requestDisallowInterceptTouchEvent(false); performClick(); return true;
+        @Override public boolean onTouchEvent(MotionEvent e){
+            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){getParent().requestDisallowInterceptTouchEvent(true);return true;}
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE||e.getActionMasked()==MotionEvent.ACTION_UP){
+                float left=dp(10),right=getWidth()-dp(10);
+                float f=Math.max(0f,Math.min(1f,(e.getX()-left)/(right-left)));
+                value=minValue+f*(maxValue-minValue);
+                if(isSensitivity)sensitivity=value;else pointerSpeed=value;invalidate();
+                if(e.getActionMasked()==MotionEvent.ACTION_UP)getParent().requestDisallowInterceptTouchEvent(false);
+                return true;
             }
             return true;
         }
-        private void updateValue(float y) {
-            float top=dp(28), bottom=getHeight()-dp(10);
-            float f=1f-(Math.max(top,Math.min(bottom,y))-top)/(bottom-top);
-            value=minValue+f*(maxValue-minValue);
-            if(isSensitivity) sensitivity=0.5f+((value-1f)*0.375f); // 0.5x to 2.0x
-            else pointerSpeed=0.5f+((value-1f)*0.875f); // 0.5x to 4.0x
-            invalidate();
-        }
-        @Override public boolean performClick() { super.performClick(); return true; }
     }
 
     private class RemoteHitLayout extends ViewGroup {

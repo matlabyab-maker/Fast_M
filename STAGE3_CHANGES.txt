@@ -1,0 +1,16 @@
+Fast_M – Stage 3 changes
+=========================
+1. Scene 3 is now reachable from the keyboard's «امکانات» button and has a visible «⌨ کیبورد» shortcut on both remote image scenes.
+2. Scene 3 keyboard was rebuilt as a Fast Keyboard-style English layout with suggestion row, utility row, multi-symbol number row, QWERTY rows, arrows and system controls.
+3. Left Click supports a long press to lock primary touch (Left Hold: ON); the Touch/Drag area can then move while the primary touch is held. A second tap releases the hold. Normal tap remains a normal left click.
+4. Pointer overlay is a colored hand shape with no black fill or black outline. Its movement remains clamped to the real display bounds so it can reach the top and bottom system-bar areas.
+5. Sensitivity and pointer-speed controls are horizontal rollers placed consecutively along the top edge of each remote scene.
+6. A «تنظیمات دسترسی و مجوزها» page was added with direct links for Accessibility, overlay permission, Usage Access, app notifications, battery optimization, and app details.
+7. Manifest includes the special-access declarations used by those settings links.
+
+Validation:
+- MainActivity.java braces: balanced.
+- MouseAccessibilityService.java braces: balanced.
+- RemoteServerService.java braces: balanced.
+- ZIP integrity is checked after packaging.
+- No local Gradle wrapper is present in this repository, so an APK build is not claimed here.

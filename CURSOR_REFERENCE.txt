@@ -1,0 +1,6 @@
+Fast_M cursor reference
+=======================
+The mouse pointer is a small, solid, vivid-orange arrowhead-style pointer.
+Color: RGB(255,126,0).
+No black part and no black outline.
+The pointer remains an accessibility overlay and can move to the full display bounds.

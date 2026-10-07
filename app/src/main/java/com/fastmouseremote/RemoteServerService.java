@@ -81,6 +81,8 @@ public class RemoteServerService extends Service {
                             if (p.length < 3) throw new IllegalArgumentException("MOVE requires dx dy");
                             a.moveCursor(Integer.parseInt(p[1]), Integer.parseInt(p[2])); out.println("OK MOVE"); break;
                         case "CLICK_LEFT": a.click(false); out.println("OK CLICK_LEFT"); break;
+                        case "LEFT_DOWN": a.leftDown(); out.println("OK LEFT_DOWN"); break;
+                        case "LEFT_UP": a.leftUp(); out.println("OK LEFT_UP"); break;
                         case "CLICK_RIGHT":
                             // Do not fake right-click with a long primary press: that can activate controls accidentally.
                             out.println("ERR RIGHT_CLICK_UNSUPPORTED"); break;

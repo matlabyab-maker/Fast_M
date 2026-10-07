@@ -24,7 +24,10 @@ import android.view.WindowManager.LayoutParams;
 public class MouseAccessibilityService extends AccessibilityService {
     public static volatile MouseAccessibilityService instance;
     private WindowManager wm; private View cursor; private LayoutParams lp; private final Handler handler=new Handler(Looper.getMainLooper());
-    private int x=150,y=250; private int screenW=720,screenH=1280;
+    private int x=150,y=250; private int screenW=720,screenH=1280; private int gestureX=150,gestureY=250;
+    private boolean primaryHold=false;
+    private GestureDescription.StrokeDescription holdStroke;
+    private long holdElapsed=0L;
     private boolean serviceAlive = false;
     private final Runnable cursorWatchdog = new Runnable() {
         @Override public void run() {
@@ -135,32 +138,42 @@ public class MouseAccessibilityService extends AccessibilityService {
         }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            // Draw directly in the view's pixel coordinate system; do not scale twice.
-            float w = getWidth(), h = getHeight();
-            if (w <= 0 || h <= 0) return;
-            Path arrow = new Path();
-            arrow.moveTo(w * 0.06f, h * 0.03f);
-            arrow.lineTo(w * 0.12f, h * 0.82f);
-            arrow.lineTo(w * 0.34f, h * 0.62f);
-            arrow.lineTo(w * 0.52f, h * 0.96f);
-            arrow.lineTo(w * 0.70f, h * 0.87f);
-            arrow.lineTo(w * 0.52f, h * 0.56f);
-            arrow.lineTo(w * 0.88f, h * 0.53f);
+            float w=getWidth(), h=getHeight();
+            if(w<=0 || h<=0) return;
+
+            // نشانگر نهایی: سرِ فلش، کوچک، یکدست و نارنجی پررنگ.
+            // هیچ خط دور مشکی یا بخش مشکی ندارد.
+            Path arrow=new Path();
+            arrow.moveTo(w*0.16f,h*0.08f);   // نوک
+            arrow.lineTo(w*0.88f,h*0.52f);   // لبهٔ بالایی
+            arrow.lineTo(w*0.57f,h*0.57f);   // شیار داخلی
+            arrow.lineTo(w*0.76f,h*0.88f);   // دسته
+            arrow.lineTo(w*0.59f,h*0.98f);
+            arrow.lineTo(w*0.40f,h*0.65f);
+            arrow.lineTo(w*0.22f,h*0.84f);
             arrow.close();
-            paint.setColor(Color.rgb(255, 210, 0));
+
+            paint.setColor(Color.rgb(255,126,0));
             paint.setStyle(Paint.Style.FILL);
-            canvas.drawPath(arrow, paint);
-            paint.setColor(Color.BLACK);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(2f, w * 0.05f));
-            paint.setStrokeJoin(Paint.Join.ROUND);
-            canvas.drawPath(arrow, paint);
+            canvas.drawPath(arrow,paint);
         }
     }
+
     public void moveCursor(int dx, int dy) {
         handler.post(() -> {
             x = Math.max(0, Math.min(Math.max(0, screenW - dp(36)), x + dx * 2));
             y = Math.max(0, Math.min(Math.max(0, screenH - dp(36)), y + dy * 2));
+            if (primaryHold && holdStroke != null) {
+                try {
+                    Path dragPath=new Path();
+                    dragPath.moveTo(gestureX,gestureY);
+                    dragPath.lineTo(x,y);
+                    holdElapsed+=45L;
+                    holdStroke=holdStroke.continueStroke(dragPath,holdElapsed-45L,45L,true);
+                    dispatchGesture(new GestureDescription.Builder().addStroke(holdStroke).build(),null,null);
+                    gestureX=x; gestureY=y;
+                } catch (Exception ignored) { }
+            }
             if (cursor == null || lp == null) {
                 showCursor();
             }
@@ -195,6 +208,35 @@ public class MouseAccessibilityService extends AccessibilityService {
             dispatchGesture(new GestureDescription.Builder().addStroke(stroke).build(),null,null);
         });
     }
+    public void leftDown() {
+        handler.post(() -> {
+            if (primaryHold) return;
+            try {
+                Path p=new Path(); p.moveTo(x,y);
+                gestureX=x; gestureY=y;
+                holdElapsed=100L;
+                holdStroke=new GestureDescription.StrokeDescription(p,0,holdElapsed,true);
+                primaryHold=dispatchGesture(new GestureDescription.Builder().addStroke(holdStroke).build(),null,null);
+            } catch (Exception e) {
+                primaryHold=false; holdStroke=null; holdElapsed=0L;
+            }
+        });
+    }
+
+    public void leftUp() {
+        handler.post(() -> {
+            if (!primaryHold || holdStroke==null) return;
+            try {
+                Path p=new Path(); p.moveTo(gestureX,gestureY); p.lineTo(x,y);
+                holdElapsed+=60L;
+                holdStroke=holdStroke.continueStroke(p,holdElapsed-60L,60L,false);
+                dispatchGesture(new GestureDescription.Builder().addStroke(holdStroke).build(),null,null);
+            } catch (Exception ignored) { }
+            primaryHold=false; holdStroke=null; holdElapsed=0L;
+            gestureX=x; gestureY=y;
+        });
+    }
+
     public void scroll(int direction){handler.post(()->{Path p=new Path();p.moveTo(x,y);p.lineTo(x,y+(direction<0?-Math.min(420,screenH/3):Math.min(420,screenH/3)));dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(p,0,350)).build(),null,null);});}
     public boolean goBack(){ return performGlobalAction(GLOBAL_ACTION_BACK); }
     /** System navigation is performed through Android global actions, not fake pointer clicks. */
