@@ -102,6 +102,8 @@ public class RemoteServerService extends Service {
                             out.println("OK TEXT_QUEUED"); break;
                         case "KEY_BACKSPACE": a.backspace(); out.println("OK BACKSPACE_QUEUED"); break;
                         case "COPY": a.editAction(AccessibilityNodeInfo.ACTION_COPY); out.println("OK COPY_QUEUED"); break;
+                        case "COPY_ALL": a.selectAllAndAction(AccessibilityNodeInfo.ACTION_COPY); out.println("OK COPY_ALL_QUEUED"); break;
+                        case "CUT": a.editAction(AccessibilityNodeInfo.ACTION_CUT); out.println("OK CUT_QUEUED"); break;
                         case "PASTE": a.editAction(AccessibilityNodeInfo.ACTION_PASTE); out.println("OK PASTE_QUEUED"); break;
                         case "UNDO": case "REDO":
                             // Android Accessibility exposes no portable standard undo/redo action.

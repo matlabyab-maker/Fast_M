@@ -187,17 +187,6 @@ public class MainActivity extends Activity {
 
         RemoteHitLayout hits = new RemoteHitLayout();
         canvas.addView(hits, new FrameLayout.LayoutParams(-1, -1));
-
-        // Menu 3 is a real visible button, not a hidden touch zone.
-        // It opens the keyboard-style remote scene.
-        Button keyboardMenu = keyboardKey("⌨  کیبورد", 13, Color.rgb(255, 248, 225));
-        FrameLayout.LayoutParams kmlp = new FrameLayout.LayoutParams(
-                (int)(getResources().getDisplayMetrics().widthPixels * 0.18f),
-                dp(48), Gravity.TOP | Gravity.RIGHT);
-        kmlp.setMargins(0, dp(4), dp(4), 0);
-        keyboardMenu.setOnClickListener(v -> showKeyboardRemote());
-        canvas.addView(keyboardMenu, kmlp);
-
         // Two slim vertical controls in the otherwise empty right-hand area.
         addVerticalControl(canvas, "حساسیت", true, sensitivity, 0.925f);
         addVerticalControl(canvas, "سرعت", false, pointerSpeed, 0.965f);
@@ -211,105 +200,42 @@ public class MainActivity extends Activity {
         FrameLayout screen = new FrameLayout(this);
         screen.setBackgroundColor(Color.rgb(173,218,232));
 
-        LinearLayout keyboard = new LinearLayout(this);
-        keyboard.setOrientation(LinearLayout.VERTICAL);
-        keyboard.setPadding(dp(5),dp(5),dp(5),dp(5));
-        keyboard.setBackgroundColor(Color.rgb(173,218,232));
+        // The user's supplied keyboard image is the actual visual keyboard.
+        // FIT_XY keeps every visible section in the same relative arrangement.
+        ImageView keyboardImage = new ImageView(this);
+        keyboardImage.setImageResource(R.drawable.remote_keyboard_scene3);
+        keyboardImage.setScaleType(ImageView.ScaleType.FIT_XY);
         FrameLayout.LayoutParams klp = new FrameLayout.LayoutParams(0,-1,Gravity.LEFT);
         klp.width = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(keyboard,klp);
+        screen.addView(keyboardImage, klp);
 
-        // Three live suggestion slots, deliberately full-width and easy to tap.
-        LinearLayout suggestions = new LinearLayout(this);
-        suggestions.setOrientation(LinearLayout.HORIZONTAL);
-        String[] suggested = {"سلام","خوب","بله"};
-        for(String word:suggested) {
-            Button b = keyboardKey(word, 16, Color.rgb(255,247,224));
-            b.setOnClickListener(v -> sendText(word));
-            suggestions.addView(b,new LinearLayout.LayoutParams(0,dp(48),1));
-        }
-        keyboard.addView(suggestions,new LinearLayout.LayoutParams(-1,dp(48)));
+        // Transparent touch layer uses the exact boundaries of the supplied image.
+        Scene3KeyboardHits keyboardHits = new Scene3KeyboardHits();
+        screen.addView(keyboardHits, klp);
 
-        String[][] rows = {
-            {"Copy","Paste","Undo","Redo","امکانات"},
-            {"1","2","3","4","5","6","7","8","9","0","-","="},
-            {"Q","W","E","R","T","Y","U","I","O","P","[","]"},
-            {"A","S","D","F","G","H","J","K","L",";","'","⌫"},
-            {"Shift","Z","X","C","V","B","N","M",",",".","/","Enter"},
-            {"Ctrl","Alt","Space","←","↓","↑","→"}
-        };
-        for(int ri=0;ri<rows.length;ri++) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            for(String key:rows[ri]) {
-                Button b=keyboardKey(key,ri==0?13:17,Color.rgb(255,248,230));
-                LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-1,1f);
-                bp.setMargins(dp(2),dp(3),dp(2),dp(3));
-                row.addView(b,bp);
-                b.setOnClickListener(v -> {
-                    switch(key) {
-                        case "Copy": send("COPY"); break;
-                        case "Paste": send("PASTE"); break;
-                        case "Undo": send("UNDO"); break;
-                        case "Redo": send("REDO"); break;
-                        case "امکانات": showRemoteImage(false); break;
-                        case "Space": sendText(" "); break;
-                        case "Enter": sendText("\n"); break;
-                        case "⌫": send("KEY_BACKSPACE"); break;
-                        case "Shift": break;
-                        case "Ctrl": case "Alt": break;
-                        case "←": send("MOVE -18 0"); break;
-                        case "→": send("MOVE 18 0"); break;
-                        case "↑": send("MOVE 0 -18"); break;
-                        case "↓": send("MOVE 0 18"); break;
-                        default: sendText(key);
-                    }
-                });
-            }
-            keyboard.addView(row,new LinearLayout.LayoutParams(-1,0,ri==0?0.8f:1f));
-        }
-
-        // Menu 3 side panel: navigation and explicit Android system controls.
-        // System actions are sent as distinct protocol commands; they never map to CLICK_LEFT.
+        // Right side: exactly two menu buttons + Left Click; everything below is Drag.
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(3), dp(3), dp(3), dp(3));
+        panel.setPadding(0,0,0,0);
         panel.setBackgroundColor(Color.rgb(173,218,232));
         FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
-        plp.leftMargin = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(panel, plp);
+        plp.leftMargin = klp.width;
+        screen.addView(panel,plp);
 
-        Button menu1 = keyboardKey("Menu 1", 15, Color.rgb(255,190,70));
-        panel.addView(menu1,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu1.setOnClickListener(v -> showRemoteImage(false));
+        LinearLayout menus = new LinearLayout(this);
+        menus.setOrientation(LinearLayout.HORIZONTAL);
+        panel.addView(menus,new LinearLayout.LayoutParams(-1,0,1.0f));
 
-        Button menu2 = keyboardKey("Menu 2", 15, Color.rgb(255,190,70));
-        panel.addView(menu2,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu2.setOnClickListener(v -> showRemoteImage(true));
+        Button menu1 = keyboardKey("Menu 1",15,Color.rgb(255,190,70));
+        Button menu2 = keyboardKey("Menu 2",15,Color.rgb(255,190,70));
+        menus.addView(menu1,new LinearLayout.LayoutParams(0,-1,1f));
+        menus.addView(menu2,new LinearLayout.LayoutParams(0,-1,1f));
+        menu1.setOnClickListener(v->{ flashScene3Button(menu1); showRemoteImage(false); });
+        menu2.setOnClickListener(v->{ flashScene3Button(menu2); showRemoteImage(true); });
 
-        Button notifications = keyboardKey("نوار بالا", 14, Color.rgb(245,225,150));
-        panel.addView(notifications,new LinearLayout.LayoutParams(-1,0,0.85f));
-        notifications.setOnClickListener(v -> send("NOTIFICATIONS"));
-
-        Button quick = keyboardKey("تنظیمات سریع", 13, Color.rgb(245,225,150));
-        panel.addView(quick,new LinearLayout.LayoutParams(-1,0,0.85f));
-        quick.setOnClickListener(v -> send("QUICK_SETTINGS"));
-
-        Button home = keyboardKey("خانه", 15, Color.rgb(210,235,200));
-        panel.addView(home,new LinearLayout.LayoutParams(-1,0,0.75f));
-        home.setOnClickListener(v -> send("HOME"));
-
-        Button back = keyboardKey("بازگشت", 15, Color.rgb(210,235,200));
-        panel.addView(back,new LinearLayout.LayoutParams(-1,0,0.75f));
-        back.setOnClickListener(v -> send("BACK"));
-
-        Button recent = keyboardKey("برنامه‌های اخیر", 12, Color.rgb(210,235,200));
-        panel.addView(recent,new LinearLayout.LayoutParams(-1,0,0.75f));
-        recent.setOnClickListener(v -> send("RECENTS"));
-
-        Button click = keyboardKey("Left Click", 16, Color.rgb(239,143,218));
-        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.85f));
-        click.setOnClickListener(v -> send("CLICK_LEFT"));
+        Button click = keyboardKey("Left Click",16,Color.rgb(239,143,218));
+        panel.addView(click,new LinearLayout.LayoutParams(-1,0,1.0f));
+        click.setOnClickListener(v->{ flashScene3Button(click); send("CLICK_LEFT"); });
 
         TextView touch = new TextView(this);
         touch.setText("Touch / Drag");
@@ -317,32 +243,138 @@ public class MainActivity extends Activity {
         touch.setTextColor(Color.rgb(76,53,74));
         touch.setGravity(Gravity.CENTER);
         touch.setBackground(bg(Color.rgb(173,218,232),0));
-        panel.addView(touch,new LinearLayout.LayoutParams(-1,0,1.15f));
+        panel.addView(touch,new LinearLayout.LayoutParams(-1,0,8.0f));
+
         final int[] last = {0,0};
-        touch.setOnTouchListener((v,e) -> {
-            if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
-                last[0]=(int)e.getX(); last[1]=(int)e.getY(); return true;
-            }
-            if (e.getActionMasked()==MotionEvent.ACTION_MOVE && connected) {
-                int x=(int)e.getX(), y=(int)e.getY();
-                int dx=x-last[0], dy=y-last[1]; last[0]=x; last[1]=y;
-                if (dx!=0 || dy!=0) queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
+        touch.setOnTouchListener((v,e)->{
+            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
+                last[0]=(int)e.getX(); last[1]=(int)e.getY();
+                v.getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             }
-            return e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL;
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE && connected){
+                int x=(int)e.getX(), y=(int)e.getY();
+                int dx=x-last[0], dy=y-last[1];
+                last[0]=x; last[1]=y;
+                if(dx!=0 || dy!=0)
+                    queueMove(Math.round(dx*sensitivity*pointerSpeed),
+                              Math.round(dy*sensitivity*pointerSpeed));
+                return true;
+            }
+            if(e.getActionMasked()==MotionEvent.ACTION_UP ||
+               e.getActionMasked()==MotionEvent.ACTION_CANCEL){
+                v.getParent().requestDisallowInterceptTouchEvent(false);
+                return true;
+            }
+            return true;
         });
+
         setContentView(screen);
     }
 
-    private Button keyboardKey(String label,int size,int color) {
-        Button b=new Button(this);
-        b.setText(label); b.setAllCaps(false); b.setTextSize(size);
-        b.setTextColor(Color.rgb(75,52,74));
-        b.setPadding(dp(1),dp(1),dp(1),dp(1));
-        GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(5));
-        d.setStroke(dp(1),Color.rgb(73,156,193));b.setBackground(d);
-        b.setMinHeight(0);b.setMinimumHeight(0);
-        return b;
+    private void flashScene3Button(final View v) {
+        final android.graphics.drawable.Drawable old = v.getBackground();
+        android.graphics.drawable.GradientDrawable glow =
+                new android.graphics.drawable.GradientDrawable();
+        glow.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        glow.setColor(Color.argb(150,255,225,0));
+        glow.setStroke(dp(2),Color.rgb(255,190,0));
+        glow.setCornerRadius(dp(5));
+        v.setBackground(glow);
+        v.postDelayed(()->{ if(v.getParent()!=null) v.setBackground(old); },160);
+    }
+
+    // Transparent hit regions mapped from the 1280x552 source image.
+    // Coordinates are normalized, so they remain aligned when the keyboard panel scales.
+    private class Scene3KeyboardHits extends ViewGroup {
+        private final java.util.ArrayList<Scene3Hit> hits = new java.util.ArrayList<>();
+
+        Scene3KeyboardHits() {
+            super(MainActivity.this);
+            setClipChildren(true);
+
+            // Top row: 10 controls.
+            add(0,0,127,85,()->send("PASTE"));
+            add(127,0,255,85,()->send("COPY_ALL"));
+            add(255,0,383,85,()->send("COPY_SCREEN"));
+            add(383,0,511,85,()->send("CUT"));
+            add(511,0,639,85,()->send("UNDO"));
+            add(639,0,767,85,()->send("REDO"));
+            add(767,0,895,85,()->send("HISTORY"));
+            add(895,0,1023,85,()->showRemoteImage(false));
+            add(1023,0,1151,85,()->showRemoteImage(true));
+            add(1151,0,1280,85,()->send("RESIZE"));
+
+            // Second row: 8 Persian word/phrase keys.
+            String[] row2={"دکمه","و","در","را","همان","که","ارسال","فایل"};
+            int[] x2={0,159,318,478,638,798,958,1118,1280};
+            for(int i=0;i<8;i++){ final String k=row2[i]; add(x2[i],85,x2[i+1],153,()->sendText(k)); }
+
+            // Number/symbol row: 10 numbers + Backspace.
+            String[] nums={"۱","۲","۳","۴","۵","۶","۷","۸","۹","۰"};
+            int[] xn={0,111,222,333,444,555,667,779,891,1003,1115,1280};
+            for(int i=0;i<10;i++){ final String k=nums[i]; add(xn[i],153,xn[i+1],231,()->sendText(k)); }
+            add(1115,153,1280,231,()->send("KEY_BACKSPACE"));
+
+            // Arabic row 1 (the Enter key spans both Arabic rows).
+            String[] ar1={"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"};
+            int[] xa={0,104,208,312,417,522,627,732,837,942,1047,1152,1280};
+            for(int i=0;i<11;i++){ final String k=ar1[i]; add(xa[i],231,xa[i+1],310,()->sendText(k)); }
+            add(1152,231,1280,389,()->sendText("\n"));
+
+            // Arabic row 2.
+            String[] ar2={"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"};
+            for(int i=0;i<11;i++){ final String k=ar2[i]; add(xa[i],310,xa[i+1],389,()->sendText(k)); }
+
+            // Arabic row 3.
+            String[] ar3={"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","؟"};
+            int[] xb={0,125,229,333,438,543,648,753,858,963,1068,1173,1280};
+            for(int i=0;i<12;i++){
+                final String k=ar3[i];
+                if("Caps".equals(k)) add(xb[i],389,xb[i+1],467,()->send("CAPS"));
+                else add(xb[i],389,xb[i+1],467,()->sendText(k));
+            }
+
+            // Bottom row.
+            add(0,467,95,552,()->send("EMOJI"));
+            add(95,467,229,552,()->send("SYMBOLS"));
+            add(229,467,334,552,()->send("LANG_FA"));
+            add(334,467,609,552,()->sendText(" "));
+            add(609,467,693,552,()->sendText("،"));
+            add(693,467,777,552,()->sendText("."));
+            add(777,467,861,552,()->send("DIAMOND"));
+            add(861,467,972,552,()->send("MOVE -18 0"));
+            add(972,467,1084,552,()->send("MOVE 18 0"));
+            add(1084,467,1180,552,()->send("MOVE 0 -18"));
+            add(1180,467,1280,552,()->send("MOVE 0 18"));
+        }
+
+        private void add(int l,int t,int r,int b,final Runnable action){
+            View v=new View(MainActivity.this);
+            v.setBackgroundColor(Color.TRANSPARENT);
+            v.setOnClickListener(w->{ flashScene3Button(w); action.run(); });
+            addView(v);
+            hits.add(new Scene3Hit(v,l/1280f,t/552f,r/1280f,b/552f));
+        }
+
+        @Override protected void onMeasure(int ws,int hs){
+            int w=MeasureSpec.getSize(ws), h=MeasureSpec.getSize(hs);
+            setMeasuredDimension(w,h);
+            for(Scene3Hit q:hits){
+                q.view.measure(
+                    MeasureSpec.makeMeasureSpec(Math.max(1,(int)(w*(q.r-q.l))),MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(Math.max(1,(int)(h*(q.b-q.t))),MeasureSpec.EXACTLY));
+            }
+        }
+        @Override protected void onLayout(boolean c,int l,int t,int r,int b){
+            int w=r-l,h=b-t;
+            for(Scene3Hit q:hits)
+                q.view.layout((int)(w*q.l),(int)(h*q.t),(int)(w*q.r),(int)(h*q.b));
+        }
+        private class Scene3Hit{
+            View view; float l,t,r,b;
+            Scene3Hit(View v,float l,float t,float r,float b){this.view=v;this.l=l;this.t=t;this.r=r;this.b=b;}
+        }
     }
 
     private void sendText(String value) {
