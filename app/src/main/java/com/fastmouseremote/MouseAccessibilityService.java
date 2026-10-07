@@ -17,6 +17,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.widget.TextView;
 import android.graphics.Canvas;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Paint;
 import android.view.View;
 import android.view.WindowManager.LayoutParams;
@@ -84,7 +86,7 @@ public class MouseAccessibilityService extends AccessibilityService {
             }
             if (cursor.getVisibility() != View.VISIBLE) cursor.setVisibility(View.VISIBLE);
             cursor.invalidate();
-            int size = dp(34);
+            int size = dp(48);
             lp.x = Math.max(0, Math.min(Math.max(0, screenW-size), x - dp(2)));
             lp.y = Math.max(0, Math.min(Math.max(0, screenH-size), y - dp(2)));
             wm.updateViewLayout(cursor, lp);
@@ -104,7 +106,7 @@ public class MouseAccessibilityService extends AccessibilityService {
         try {
             CursorView pointer = new CursorView(this);
             cursor = pointer;
-            int size = dp(34);
+            int size = dp(36);
             lp = new LayoutParams(size, size,
                     LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                     LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_NOT_TOUCHABLE
@@ -128,42 +130,19 @@ public class MouseAccessibilityService extends AccessibilityService {
     }
 
     private static class CursorView extends View {
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Bitmap cursorBitmap;
         CursorView(AccessibilityService context) {
             super(context);
             setWillNotDraw(false);
+            cursorBitmap = BitmapFactory.decodeResource(context.getResources(), R.drawable.cursor_orange_glass);
         }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            // Stable circular mouse marker. The overlay remains non-touchable;
-            // only its visual shape is changed from the newer arrow cursor.
-            float w = getWidth(), h = getHeight();
-            if (w <= 0 || h <= 0) return;
-
-            float cx = w * 0.50f;
-            float cy = h * 0.50f;
-            float radius = Math.min(w, h) * 0.34f;
-
-            // Bright orange/red ring with a small gap, matching the older
-            // circular cursor style while keeping the center transparent.
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(3f, w * 0.10f));
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            paint.setColor(Color.rgb(255, 92, 32));
-            canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius,
-                    -48f, 276f, false, paint);
-
-            // Small center point makes the exact pointer position unambiguous.
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.rgb(255, 145, 32));
-            canvas.drawCircle(cx, cy, Math.max(2f, w * 0.07f), paint);
-
-            // Fine dark outline around the ring for visibility on light screens.
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(1f, w * 0.035f));
-            paint.setColor(Color.rgb(110, 45, 25));
-            canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius,
-                    -48f, 276f, false, paint);
+            if (cursorBitmap == null || getWidth() <= 0 || getHeight() <= 0) return;
+            paint.setAlpha(255);
+            canvas.drawBitmap(cursorBitmap, null,
+                    new android.graphics.Rect(0, 0, getWidth(), getHeight()), paint);
         }
     }
     public void moveCursor(int dx, int dy) {
