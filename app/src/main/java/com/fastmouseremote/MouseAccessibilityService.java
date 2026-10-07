@@ -84,7 +84,7 @@ public class MouseAccessibilityService extends AccessibilityService {
             }
             if (cursor.getVisibility() != View.VISIBLE) cursor.setVisibility(View.VISIBLE);
             cursor.invalidate();
-            int size = dp(36);
+            int size = dp(34);
             lp.x = Math.max(0, Math.min(Math.max(0, screenW-size), x - dp(2)));
             lp.y = Math.max(0, Math.min(Math.max(0, screenH-size), y - dp(2)));
             wm.updateViewLayout(cursor, lp);
@@ -104,7 +104,7 @@ public class MouseAccessibilityService extends AccessibilityService {
         try {
             CursorView pointer = new CursorView(this);
             cursor = pointer;
-            int size = dp(36);
+            int size = dp(34);
             lp = new LayoutParams(size, size,
                     LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                     LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_NOT_TOUCHABLE
@@ -135,26 +135,35 @@ public class MouseAccessibilityService extends AccessibilityService {
         }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            // Draw directly in the view's pixel coordinate system; do not scale twice.
+            // Stable circular mouse marker. The overlay remains non-touchable;
+            // only its visual shape is changed from the newer arrow cursor.
             float w = getWidth(), h = getHeight();
             if (w <= 0 || h <= 0) return;
-            Path arrow = new Path();
-            arrow.moveTo(w * 0.06f, h * 0.03f);
-            arrow.lineTo(w * 0.12f, h * 0.82f);
-            arrow.lineTo(w * 0.34f, h * 0.62f);
-            arrow.lineTo(w * 0.52f, h * 0.96f);
-            arrow.lineTo(w * 0.70f, h * 0.87f);
-            arrow.lineTo(w * 0.52f, h * 0.56f);
-            arrow.lineTo(w * 0.88f, h * 0.53f);
-            arrow.close();
-            paint.setColor(Color.rgb(255, 210, 0));
-            paint.setStyle(Paint.Style.FILL);
-            canvas.drawPath(arrow, paint);
-            paint.setColor(Color.BLACK);
+
+            float cx = w * 0.50f;
+            float cy = h * 0.50f;
+            float radius = Math.min(w, h) * 0.34f;
+
+            // Bright orange/red ring with a small gap, matching the older
+            // circular cursor style while keeping the center transparent.
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(2f, w * 0.05f));
-            paint.setStrokeJoin(Paint.Join.ROUND);
-            canvas.drawPath(arrow, paint);
+            paint.setStrokeWidth(Math.max(3f, w * 0.10f));
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setColor(Color.rgb(255, 92, 32));
+            canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius,
+                    -48f, 276f, false, paint);
+
+            // Small center point makes the exact pointer position unambiguous.
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.rgb(255, 145, 32));
+            canvas.drawCircle(cx, cy, Math.max(2f, w * 0.07f), paint);
+
+            // Fine dark outline around the ring for visibility on light screens.
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, w * 0.035f));
+            paint.setColor(Color.rgb(110, 45, 25));
+            canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius,
+                    -48f, 276f, false, paint);
         }
     }
     public void moveCursor(int dx, int dy) {

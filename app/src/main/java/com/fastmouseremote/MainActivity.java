@@ -258,35 +258,64 @@ public class MainActivity extends Activity {
             keyboard.addView(row,new LinearLayout.LayoutParams(-1,0,ri==0?0.8f:1f));
         }
 
-        // Right panel follows the reference: Menu 3, Left Click, and a small drag touch pad.
-        LinearLayout panel=new LinearLayout(this);
+        // Menu 3 side panel: navigation and explicit Android system controls.
+        // System actions are sent as distinct protocol commands; they never map to CLICK_LEFT.
+        LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(3), dp(3), dp(3), dp(3));
         panel.setBackgroundColor(Color.rgb(173,218,232));
-        FrameLayout.LayoutParams plp=new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
-        plp.leftMargin=(int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(panel,plp);
-        Button menu=keyboardKey("Menu 3",24,Color.rgb(255,128,0));
-        panel.addView(menu,new LinearLayout.LayoutParams(-1,0,0.14f));
-        menu.setOnClickListener(v->showRemoteImage(false));
-        Button click=keyboardKey("Left Click",23,Color.rgb(239,143,218));
-        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.20f));
-        click.setOnClickListener(v->send("CLICK_LEFT"));
-        View spacer=new View(this);
-        panel.addView(spacer,new LinearLayout.LayoutParams(-1,0,0.48f));
-        TextView touch=new TextView(this);
-        touch.setText("Touch");
-        touch.setTextSize(20);
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
+        plp.leftMargin = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
+        screen.addView(panel, plp);
+
+        Button menu1 = keyboardKey("Menu 1", 15, Color.rgb(255,190,70));
+        panel.addView(menu1,new LinearLayout.LayoutParams(-1,0,0.75f));
+        menu1.setOnClickListener(v -> showRemoteImage(false));
+
+        Button menu2 = keyboardKey("Menu 2", 15, Color.rgb(255,190,70));
+        panel.addView(menu2,new LinearLayout.LayoutParams(-1,0,0.75f));
+        menu2.setOnClickListener(v -> showRemoteImage(true));
+
+        Button notifications = keyboardKey("نوار بالا", 14, Color.rgb(245,225,150));
+        panel.addView(notifications,new LinearLayout.LayoutParams(-1,0,0.85f));
+        notifications.setOnClickListener(v -> send("NOTIFICATIONS"));
+
+        Button quick = keyboardKey("تنظیمات سریع", 13, Color.rgb(245,225,150));
+        panel.addView(quick,new LinearLayout.LayoutParams(-1,0,0.85f));
+        quick.setOnClickListener(v -> send("QUICK_SETTINGS"));
+
+        Button home = keyboardKey("خانه", 15, Color.rgb(210,235,200));
+        panel.addView(home,new LinearLayout.LayoutParams(-1,0,0.75f));
+        home.setOnClickListener(v -> send("HOME"));
+
+        Button back = keyboardKey("بازگشت", 15, Color.rgb(210,235,200));
+        panel.addView(back,new LinearLayout.LayoutParams(-1,0,0.75f));
+        back.setOnClickListener(v -> send("BACK"));
+
+        Button recent = keyboardKey("برنامه‌های اخیر", 12, Color.rgb(210,235,200));
+        panel.addView(recent,new LinearLayout.LayoutParams(-1,0,0.75f));
+        recent.setOnClickListener(v -> send("RECENTS"));
+
+        Button click = keyboardKey("Left Click", 16, Color.rgb(239,143,218));
+        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.85f));
+        click.setOnClickListener(v -> send("CLICK_LEFT"));
+
+        TextView touch = new TextView(this);
+        touch.setText("Touch / Drag");
+        touch.setTextSize(15);
         touch.setTextColor(Color.rgb(76,53,74));
         touch.setGravity(Gravity.CENTER);
         touch.setBackground(bg(Color.rgb(173,218,232),0));
-        panel.addView(touch,new LinearLayout.LayoutParams(-1,0,0.18f));
-        final int[] last={0,0};
-        touch.setOnTouchListener((v,e)->{
-            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){last[0]=(int)e.getX();last[1]=(int)e.getY();return true;}
-            if(e.getActionMasked()==MotionEvent.ACTION_MOVE && connected){
+        panel.addView(touch,new LinearLayout.LayoutParams(-1,0,1.15f));
+        final int[] last = {0,0};
+        touch.setOnTouchListener((v,e) -> {
+            if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
+                last[0]=(int)e.getX(); last[1]=(int)e.getY(); return true;
+            }
+            if (e.getActionMasked()==MotionEvent.ACTION_MOVE && connected) {
                 int x=(int)e.getX(), y=(int)e.getY();
-                int dx=x-last[0],dy=y-last[1];last[0]=x;last[1]=y;
-                if(dx!=0||dy!=0)queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
+                int dx=x-last[0], dy=y-last[1]; last[0]=x; last[1]=y;
+                if (dx!=0 || dy!=0) queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
                 return true;
             }
             return e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL;
@@ -396,23 +425,29 @@ public class MainActivity extends Activity {
                 addHit(0.724f,0.263f,1.000f,1.000f,()->send("CLICK_LEFT"));
                 addDragArea(0.326f,0.263f,0.724f,1.000f);
             } else {
-                // Tap the empty upper-right area to open the keyboard/remote third scene.
-                addHit(0.72f,0.00f,0.91f,0.16f,()->showKeyboardRemote());
-                // Image 1: Page Up / Page Down, Menu 2, Left Click and Drag.
-                addHit(0.00f,0.00f,0.195f,0.315f,()->send("SCROLL -1"));
-                addHit(0.195f,0.00f,0.390f,0.315f,()->send("SCROLL 1"));
-                addHit(0.015f,0.318f,0.375f,0.395f,()->showRemoteImage(false));
-                addHit(0.00f,0.402f,0.390f,1.000f,()->send("CLICK_LEFT"));
-                addDragArea(0.390f,0.402f,1.000f,1.000f);
+                // Menu 2 image coordinates are aligned to the visible button boundaries.
+                // Top row: Menu 2 / Back; second row: Page Up / Page Down.
+                addHit(0.00f,0.00f,0.195f,0.150f,()->showRemoteImage(false));
+                addHit(0.195f,0.00f,0.390f,0.150f,()->send("BACK"));
+                addHit(0.00f,0.150f,0.195f,0.390f,()->send("SCROLL -1"));
+                addHit(0.195f,0.150f,0.390f,0.390f,()->send("SCROLL 1"));
+                // Left Click and Drag are separated by the visible vertical divider.
+                addHit(0.00f,0.390f,0.390f,1.000f,()->send("CLICK_LEFT"));
+                addDragArea(0.390f,0.390f,1.000f,1.000f);
+                // Keep the third-scene shortcut in a small, otherwise-empty top-right area.
+                addHit(0.820f,0.000f,0.985f,0.140f,()->showKeyboardRemote());
             }
         }
         private void flashTap(View v) {
-            android.graphics.drawable.Drawable old = v.getBackground();
+            final android.graphics.drawable.Drawable old = v.getBackground();
             android.graphics.drawable.GradientDrawable glow = new android.graphics.drawable.GradientDrawable();
-            glow.setColor(Color.argb(190, 255, 225, 0));
+            glow.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            glow.setColor(Color.argb(150, 255, 225, 0));
             glow.setStroke(dp(2), Color.rgb(255, 190, 0));
             v.setBackground(glow);
-            v.postDelayed(() -> v.setBackground(old), 180);
+            v.postDelayed(() -> {
+                if (v.getParent() != null) v.setBackground(old);
+            }, 160);
         }
 
         private void addHit(float l,float t,float r,float b,Runnable action) {
