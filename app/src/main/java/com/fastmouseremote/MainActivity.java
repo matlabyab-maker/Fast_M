@@ -188,139 +188,202 @@ public class MainActivity extends Activity {
         RemoteHitLayout hits = new RemoteHitLayout();
         canvas.addView(hits, new FrameLayout.LayoutParams(-1, -1));
         // Two slim vertical controls in the otherwise empty right-hand area.
-        addVerticalControl(canvas, "حساسیت", true, sensitivity, 0.925f);
-        addVerticalControl(canvas, "سرعت", false, pointerSpeed, 0.965f);
+        addHorizontalControl(canvas, "حساسیت", true, sensitivity, 0);
+        addHorizontalControl(canvas, "سرعت", false, pointerSpeed, 1);
         setContentView(canvas);
     }
 
 
 
     // Menu 3: large Fast Keyboard-style panel on the left and mouse controls on the right.
+    // Scene 3: the supplied remote image is the exact right-side control panel;
+    // the larger left side contains a compact Fast Keyboard layout.
     private void showKeyboardRemote() {
-        FrameLayout screen = new FrameLayout(this);
+        final FrameLayout screen = new FrameLayout(this);
         screen.setBackgroundColor(Color.rgb(173,218,232));
 
+        // Exact supplied scene-3 artwork. It supplies the Menu 3 / Left Click / Touch visual.
+        ImageView scene = new ImageView(this);
+        scene.setImageResource(R.drawable.scene3_remote);
+        scene.setScaleType(ImageView.ScaleType.FIT_XY);
+        screen.addView(scene, new FrameLayout.LayoutParams(-1,-1));
+
+        // Fast Keyboard occupies the larger left portion.
         LinearLayout keyboard = new LinearLayout(this);
         keyboard.setOrientation(LinearLayout.VERTICAL);
-        keyboard.setPadding(dp(5),dp(5),dp(5),dp(5));
-        keyboard.setBackgroundColor(Color.rgb(173,218,232));
-        FrameLayout.LayoutParams klp = new FrameLayout.LayoutParams(0,-1,Gravity.LEFT);
-        klp.width = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(keyboard,klp);
+        keyboard.setPadding(dp(3),dp(3),dp(3),dp(3));
+        keyboard.setBackgroundColor(Color.rgb(248,246,232));
+        FrameLayout.LayoutParams klp = new FrameLayout.LayoutParams(
+                0,-1,Gravity.LEFT);
+        klp.width = (int)(getResources().getDisplayMetrics().widthPixels * 0.735f);
+        screen.addView(keyboard, klp);
 
-        // Three live suggestion slots, deliberately full-width and easy to tap.
+        // Compact toolbar, following the Fast Keyboard reference.
+        String[] toolbar = {"Copy All","Copy Screen","Paste","Cut","Undo","Redo",
+                "100 History","امکانات","Mouse","Resize"};
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        for (String key : toolbar) {
+            Button b = keyboardKey(key, key.length()>8 ? 7 : 8, Color.rgb(255,248,230));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(34),1f);
+            lp.setMargins(dp(1),dp(1),dp(1),dp(1));
+            top.addView(b,lp);
+            b.setOnClickListener(v -> {
+                switch(key) {
+                    case "Copy All": send("COPY_ALL"); break;
+                    case "Copy Screen": send("COPY_SCREEN"); break;
+                    case "Paste": send("PASTE"); break;
+                    case "Cut": send("CUT"); break;
+                    case "Undo": send("UNDO"); break;
+                    case "Redo": send("REDO"); break;
+                    case "100 History": send("CLIPBOARD_HISTORY"); break;
+                    case "امکانات": showRemoteImage(false); break;
+                    case "Mouse": showRemoteImage(true); break;
+                    case "Resize": break;
+                }
+            });
+        }
+        keyboard.addView(top,new LinearLayout.LayoutParams(-1,dp(36)));
+
+        // Suggestions.
         LinearLayout suggestions = new LinearLayout(this);
         suggestions.setOrientation(LinearLayout.HORIZONTAL);
-        String[] suggested = {"سلام","خوب","بله"};
+        String[] suggested = {"سلام","عشق","خوب","چطور","امروز","ممنون","بله"};
         for(String word:suggested) {
-            Button b = keyboardKey(word, 16, Color.rgb(255,247,224));
+            Button b = keyboardKey(word,8,Color.rgb(255,250,235));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(30),1f);
+            lp.setMargins(dp(1),0,dp(1),dp(1));
+            suggestions.addView(b,lp);
             b.setOnClickListener(v -> sendText(word));
-            suggestions.addView(b,new LinearLayout.LayoutParams(0,dp(48),1));
         }
-        keyboard.addView(suggestions,new LinearLayout.LayoutParams(-1,dp(48)));
+        keyboard.addView(suggestions,new LinearLayout.LayoutParams(-1,dp(31)));
 
-        String[][] rows = {
-            {"Copy","Paste","Undo","Redo","امکانات"},
-            {"1","2","3","4","5","6","7","8","9","0","-","="},
-            {"Q","W","E","R","T","Y","U","I","O","P","[","]"},
-            {"A","S","D","F","G","H","J","K","L",";","'","⌫"},
-            {"Shift","Z","X","C","V","B","N","M",",",".","/","Enter"},
-            {"Ctrl","Alt","Space","←","↓","↑","→"}
-        };
-        for(int ri=0;ri<rows.length;ri++) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            for(String key:rows[ri]) {
-                Button b=keyboardKey(key,ri==0?13:17,Color.rgb(255,248,230));
-                LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-1,1f);
-                bp.setMargins(dp(2),dp(3),dp(2),dp(3));
-                row.addView(b,bp);
-                b.setOnClickListener(v -> {
-                    switch(key) {
-                        case "Copy": send("COPY"); break;
-                        case "Paste": send("PASTE"); break;
-                        case "Undo": send("UNDO"); break;
-                        case "Redo": send("REDO"); break;
-                        case "امکانات": showRemoteImage(false); break;
-                        case "Space": sendText(" "); break;
-                        case "Enter": sendText("\n"); break;
-                        case "⌫": send("KEY_BACKSPACE"); break;
-                        case "Shift": break;
-                        case "Ctrl": case "Alt": break;
-                        case "←": send("MOVE -18 0"); break;
-                        case "→": send("MOVE 18 0"); break;
-                        case "↑": send("MOVE 0 -18"); break;
-                        case "↓": send("MOVE 0 18"); break;
-                        default: sendText(key);
-                    }
-                });
-            }
-            keyboard.addView(row,new LinearLayout.LayoutParams(-1,0,ri==0?0.8f:1f));
+        // Reusable rows that keep the visual hierarchy of Fast Keyboard:
+        // cream keycaps, navy Persian letters, brown digits, red symbols.
+        addKeyboardRow(keyboard, new String[]{"! ۱","@ ۲","# ۳","$ ۴","% ۵","^ ۶","& ۷","* ۸","( ۹",") ۰","⌫"},
+                10, Color.rgb(92,65,48), Color.rgb(210,45,45), true);
+
+        addKeyboardRow(keyboard, new String[]{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},
+                17, Color.rgb(25,48,88), 0, false);
+
+        addKeyboardRow(keyboard, new String[]{"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},
+                17, Color.rgb(25,48,88), 0, false);
+
+        addKeyboardRow(keyboard, new String[]{"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","=_"},
+                12, Color.rgb(25,48,88), Color.rgb(210,45,45), false);
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        String[] bottomKeys = {"Emoji","123/Symbols","Globe","Space","،","؟","+/-","←","↑","↓","→"};
+        for(String key:bottomKeys) {
+            int sz = key.equals("Space") ? 13 : 9;
+            Button b=keyboardKey(key,sz, key.equals("Space") ? Color.rgb(255,218,90) : Color.rgb(255,248,230));
+            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-1,key.equals("Space")?2.4f:1f);
+            bp.setMargins(dp(1),dp(2),dp(1),dp(1));
+            bottom.addView(b,bp);
+            b.setOnClickListener(v -> {
+                switch(key) {
+                    case "Emoji": send("EMOJI"); break;
+                    case "123/Symbols": send("SYMBOLS"); break;
+                    case "Globe": send("GLOBE"); break;
+                    case "Space": sendText(" "); break;
+                    case "،": sendText("،"); break;
+                    case "؟": sendText("؟"); break;
+                    case "+/-": send("PLUS_MINUS"); break;
+                    case "←": send("MOVE -18 0"); break;
+                    case "→": send("MOVE 18 0"); break;
+                    case "↑": send("MOVE 0 -18"); break;
+                    case "↓": send("MOVE 0 18"); break;
+                }
+            });
         }
+        keyboard.addView(bottom,new LinearLayout.LayoutParams(-1,0,1f));
 
-        // Menu 3 side panel: navigation and explicit Android system controls.
-        // System actions are sent as distinct protocol commands; they never map to CLICK_LEFT.
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(3), dp(3), dp(3), dp(3));
-        panel.setBackgroundColor(Color.rgb(173,218,232));
-        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(-1,-1,Gravity.RIGHT);
-        plp.leftMargin = (int)(getResources().getDisplayMetrics().widthPixels*0.74f);
-        screen.addView(panel, plp);
+        // Transparent hit zones over the supplied scene-3 image.
+        // They are independent from the keyboard, so Touch/Drag cannot generate Left Click.
+        View menu3 = transparentHit();
+        FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(-1,0);
+        menuLp.leftMargin=(int)(getResources().getDisplayMetrics().widthPixels*0.735f);
+        menuLp.width=getResources().getDisplayMetrics().widthPixels-menuLp.leftMargin;
+        menuLp.height=(int)(getResources().getDisplayMetrics().heightPixels*0.115f);
+        menuLp.topMargin=0;
+        screen.addView(menu3,menuLp);
+        menu3.setOnClickListener(v -> showKeyboardRemote());
 
-        Button menu1 = keyboardKey("Menu 1", 15, Color.rgb(255,190,70));
-        panel.addView(menu1,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu1.setOnClickListener(v -> showRemoteImage(false));
+        View leftClick = transparentHit();
+        FrameLayout.LayoutParams clickLp = new FrameLayout.LayoutParams(-1,0);
+        clickLp.leftMargin=(int)(getResources().getDisplayMetrics().widthPixels*0.735f);
+        clickLp.width=getResources().getDisplayMetrics().widthPixels-clickLp.leftMargin;
+        clickLp.height=(int)(getResources().getDisplayMetrics().heightPixels*0.165f);
+        clickLp.topMargin=(int)(getResources().getDisplayMetrics().heightPixels*0.115f);
+        screen.addView(leftClick,clickLp);
+        leftClick.setOnClickListener(v -> send("CLICK_LEFT"));
 
-        Button menu2 = keyboardKey("Menu 2", 15, Color.rgb(255,190,70));
-        panel.addView(menu2,new LinearLayout.LayoutParams(-1,0,0.75f));
-        menu2.setOnClickListener(v -> showRemoteImage(true));
+        View touch = transparentHit();
+        FrameLayout.LayoutParams touchLp = new FrameLayout.LayoutParams(-1,0);
+        touchLp.leftMargin=(int)(getResources().getDisplayMetrics().widthPixels*0.735f);
+        touchLp.width=getResources().getDisplayMetrics().widthPixels-touchLp.leftMargin;
+        touchLp.height=getResources().getDisplayMetrics().heightPixels-
+                (int)(getResources().getDisplayMetrics().heightPixels*0.28f);
+        touchLp.topMargin=(int)(getResources().getDisplayMetrics().heightPixels*0.28f);
+        screen.addView(touch,touchLp);
 
-        Button notifications = keyboardKey("نوار بالا", 14, Color.rgb(245,225,150));
-        panel.addView(notifications,new LinearLayout.LayoutParams(-1,0,0.85f));
-        notifications.setOnClickListener(v -> send("NOTIFICATIONS"));
-
-        Button quick = keyboardKey("تنظیمات سریع", 13, Color.rgb(245,225,150));
-        panel.addView(quick,new LinearLayout.LayoutParams(-1,0,0.85f));
-        quick.setOnClickListener(v -> send("QUICK_SETTINGS"));
-
-        Button home = keyboardKey("خانه", 15, Color.rgb(210,235,200));
-        panel.addView(home,new LinearLayout.LayoutParams(-1,0,0.75f));
-        home.setOnClickListener(v -> send("HOME"));
-
-        Button back = keyboardKey("بازگشت", 15, Color.rgb(210,235,200));
-        panel.addView(back,new LinearLayout.LayoutParams(-1,0,0.75f));
-        back.setOnClickListener(v -> send("BACK"));
-
-        Button recent = keyboardKey("برنامه‌های اخیر", 12, Color.rgb(210,235,200));
-        panel.addView(recent,new LinearLayout.LayoutParams(-1,0,0.75f));
-        recent.setOnClickListener(v -> send("RECENTS"));
-
-        Button click = keyboardKey("Left Click", 16, Color.rgb(239,143,218));
-        panel.addView(click,new LinearLayout.LayoutParams(-1,0,0.85f));
-        click.setOnClickListener(v -> send("CLICK_LEFT"));
-
-        TextView touch = new TextView(this);
-        touch.setText("Touch / Drag");
-        touch.setTextSize(15);
-        touch.setTextColor(Color.rgb(76,53,74));
-        touch.setGravity(Gravity.CENTER);
-        touch.setBackground(bg(Color.rgb(173,218,232),0));
-        panel.addView(touch,new LinearLayout.LayoutParams(-1,0,1.15f));
         final int[] last = {0,0};
         touch.setOnTouchListener((v,e) -> {
-            if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
-                last[0]=(int)e.getX(); last[1]=(int)e.getY(); return true;
-            }
-            if (e.getActionMasked()==MotionEvent.ACTION_MOVE && connected) {
-                int x=(int)e.getX(), y=(int)e.getY();
-                int dx=x-last[0], dy=y-last[1]; last[0]=x; last[1]=y;
-                if (dx!=0 || dy!=0) queueMove(Math.round(dx*sensitivity*pointerSpeed),Math.round(dy*sensitivity*pointerSpeed));
-                return true;
-            }
-            return e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL;
+            try {
+                switch(e.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        last[0]=(int)e.getRawX(); last[1]=(int)e.getRawY();
+                        v.getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        if (connected) {
+                            int x=(int)e.getRawX(), y=(int)e.getRawY();
+                            int dx=x-last[0], dy=y-last[1];
+                            last[0]=x; last[1]=y;
+                            if(dx!=0 || dy!=0)
+                                queueMove(Math.round(dx*sensitivity*pointerSpeed),
+                                          Math.round(dy*sensitivity*pointerSpeed));
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        v.getParent().requestDisallowInterceptTouchEvent(false);
+                        return true;
+                    default:
+                        return true;
+                }
+            } catch(RuntimeException ex) { return true; }
         });
+
         setContentView(screen);
+    }
+
+    private View transparentHit() {
+        View v = new View(this);
+        v.setBackgroundColor(Color.TRANSPARENT);
+        return v;
+    }
+
+    private void addKeyboardRow(LinearLayout keyboard, String[] keys, int size,
+                                int textColor, int symbolColor, boolean numberRow) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (String key : keys) {
+            Button b = keyboardKey(key,size,Color.rgb(255,248,230));
+            b.setTextColor(textColor);
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0,0,1f);
+            bp.setMargins(dp(1),dp(1),dp(1),dp(1));
+            row.addView(b,bp);
+            b.setOnClickListener(v -> {
+                if ("⌫".equals(key)) { send("KEY_BACKSPACE"); return; }
+                if ("Caps".equals(key) || "=_".equals(key)) { send("SPECIAL "+key); return; }
+                String value = key;
+                if (numberRow && key.length()>1) value = key.substring(key.length()-1);
+                sendText(value);
+            });
+        }
+        keyboard.addView(row,new LinearLayout.LayoutParams(-1,0,1f));
     }
 
     private Button keyboardKey(String label,int size,int color) {
@@ -341,70 +404,92 @@ public class MainActivity extends Activity {
         send("TEXT "+encoded);
     }
 
-    private void addVerticalControl(FrameLayout canvas, String label, boolean isSensitivity,
-                                    float initialValue, float xFraction) {
-        VerticalControl control = new VerticalControl(label, isSensitivity, initialValue);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(24), dp(150),
+    // Two horizontal pointer controls, consecutive near the top edge.
+    private void addHorizontalControl(FrameLayout canvas, String label, boolean isSensitivity,
+                                      float initialValue, int order) {
+        HorizontalControl control = new HorizontalControl(label, isSensitivity, initialValue);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(150), dp(30),
                 Gravity.TOP | Gravity.RIGHT);
-        lp.topMargin = 0;
-        lp.rightMargin = dp(isSensitivity ? 30 : 2); // consecutive slim rails, aligned to the top edge
+        lp.topMargin = dp(2);
+        lp.rightMargin = dp(2 + order * 154);
         canvas.addView(control, lp);
     }
 
-    private class VerticalControl extends View {
+    private class HorizontalControl extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final String label;
         private final boolean isSensitivity;
         private float value;
-        private float downY;
         private final int minValue = 1, maxValue = 5;
 
-        VerticalControl(String label, boolean isSensitivity, float initialValue) {
+        HorizontalControl(String label, boolean isSensitivity, float initialValue) {
             super(MainActivity.this);
             this.label = label;
             this.isSensitivity = isSensitivity;
             this.value = Math.max(minValue, Math.min(maxValue, initialValue));
             setContentDescription(label);
             setBackgroundColor(Color.argb(35, 0, 0, 0));
+            setClickable(true);
         }
 
         @Override protected void onDraw(Canvas c) {
             super.onDraw(c);
-            float cx = getWidth()/2f;
-            float top = dp(28), bottom = getHeight()-dp(10);
+            float left = dp(34), right = getWidth() - dp(8);
+            float cy = getHeight() / 2f;
             paint.setStrokeWidth(dp(3));
+            paint.setStrokeCap(Paint.Cap.ROUND);
             paint.setColor(Color.rgb(70,70,70));
-            c.drawLine(cx, top, cx, bottom, paint);
+            c.drawLine(left, cy, right, cy, paint);
+
             float fraction = (value-minValue)/(float)(maxValue-minValue);
-            float thumbY = bottom - fraction*(bottom-top);
+            float thumbX = left + fraction*(right-left);
             paint.setColor(isSensitivity ? Color.rgb(220,40,140) : Color.rgb(20,110,220));
-            c.drawCircle(cx, thumbY, dp(7), paint);
+            c.drawCircle(thumbX, cy, dp(7), paint);
+
             paint.setTextAlign(Paint.Align.CENTER);
             paint.setTextSize(dp(10));
             paint.setColor(Color.rgb(35,35,35));
-            c.drawText(isSensitivity ? "حس" : "سر", cx, dp(12), paint);
-            c.drawText(String.valueOf(Math.round(value)), cx, getHeight()-dp(1), paint);
+            c.drawText(isSensitivity ? "حس" : "سر", dp(14), cy + dp(4), paint);
+            c.drawText(String.valueOf(Math.round(value)), right + dp(1), cy + dp(4), paint);
         }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
             if (e.getActionMasked()==MotionEvent.ACTION_DOWN) {
-                downY=e.getY(); updateValue(e.getY()); getParent().requestDisallowInterceptTouchEvent(true); return true;
+                updateValue(e.getX());
+                getParent().requestDisallowInterceptTouchEvent(true);
+                return true;
             }
-            if (e.getActionMasked()==MotionEvent.ACTION_MOVE) { updateValue(e.getY()); return true; }
-            if (e.getActionMasked()==MotionEvent.ACTION_UP || e.getActionMasked()==MotionEvent.ACTION_CANCEL) {
-                updateValue(e.getY()); getParent().requestDisallowInterceptTouchEvent(false); performClick(); return true;
+            if (e.getActionMasked()==MotionEvent.ACTION_MOVE) {
+                updateValue(e.getX());
+                return true;
+            }
+            if (e.getActionMasked()==MotionEvent.ACTION_UP ||
+                e.getActionMasked()==MotionEvent.ACTION_CANCEL) {
+                updateValue(e.getX());
+                getParent().requestDisallowInterceptTouchEvent(false);
+                performClick();
+                return true;
             }
             return true;
         }
-        private void updateValue(float y) {
-            float top=dp(28), bottom=getHeight()-dp(10);
-            float f=1f-(Math.max(top,Math.min(bottom,y))-top)/(bottom-top);
-            value=minValue+f*(maxValue-minValue);
-            if(isSensitivity) sensitivity=0.5f+((value-1f)*0.375f); // 0.5x to 2.0x
-            else pointerSpeed=0.5f+((value-1f)*0.875f); // 0.5x to 4.0x
+
+        private void updateValue(float x) {
+            float left = dp(34), right = getWidth() - dp(8);
+            float clamped = Math.max(left, Math.min(right, x));
+            float f = (clamped-left)/(right-left);
+            value = minValue + f*(maxValue-minValue);
+            if (isSensitivity) {
+                sensitivity = 0.5f + ((value-1f)*0.375f); // 0.5x to 2.0x
+            } else {
+                pointerSpeed = 0.5f + ((value-1f)*0.875f); // 0.5x to 4.0x
+            }
             invalidate();
         }
-        @Override public boolean performClick() { super.performClick(); return true; }
+
+        @Override public boolean performClick() {
+            super.performClick();
+            return true;
+        }
     }
 
     private class RemoteHitLayout extends ViewGroup {

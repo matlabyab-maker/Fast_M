@@ -17,8 +17,6 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.widget.TextView;
 import android.graphics.Canvas;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Paint;
 import android.view.View;
 import android.view.WindowManager.LayoutParams;
@@ -86,7 +84,7 @@ public class MouseAccessibilityService extends AccessibilityService {
             }
             if (cursor.getVisibility() != View.VISIBLE) cursor.setVisibility(View.VISIBLE);
             cursor.invalidate();
-            int size = dp(48);
+            int size = dp(36);
             lp.x = Math.max(0, Math.min(Math.max(0, screenW-size), x - dp(2)));
             lp.y = Math.max(0, Math.min(Math.max(0, screenH-size), y - dp(2)));
             wm.updateViewLayout(cursor, lp);
@@ -130,19 +128,33 @@ public class MouseAccessibilityService extends AccessibilityService {
     }
 
     private static class CursorView extends View {
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        private final Bitmap cursorBitmap;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         CursorView(AccessibilityService context) {
             super(context);
             setWillNotDraw(false);
-            cursorBitmap = BitmapFactory.decodeResource(context.getResources(), R.drawable.cursor_orange_glass);
         }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (cursorBitmap == null || getWidth() <= 0 || getHeight() <= 0) return;
-            paint.setAlpha(255);
-            canvas.drawBitmap(cursorBitmap, null,
-                    new android.graphics.Rect(0, 0, getWidth(), getHeight()), paint);
+            // Draw directly in the view's pixel coordinate system; do not scale twice.
+            float w = getWidth(), h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            Path arrow = new Path();
+            arrow.moveTo(w * 0.06f, h * 0.03f);
+            arrow.lineTo(w * 0.12f, h * 0.82f);
+            arrow.lineTo(w * 0.34f, h * 0.62f);
+            arrow.lineTo(w * 0.52f, h * 0.96f);
+            arrow.lineTo(w * 0.70f, h * 0.87f);
+            arrow.lineTo(w * 0.52f, h * 0.56f);
+            arrow.lineTo(w * 0.88f, h * 0.53f);
+            arrow.close();
+            paint.setColor(Color.rgb(255, 210, 0));
+            paint.setStyle(Paint.Style.FILL);
+            canvas.drawPath(arrow, paint);
+            paint.setColor(Color.BLACK);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(2f, w * 0.05f));
+            paint.setStrokeJoin(Paint.Join.ROUND);
+            canvas.drawPath(arrow, paint);
         }
     }
     public void moveCursor(int dx, int dy) {
