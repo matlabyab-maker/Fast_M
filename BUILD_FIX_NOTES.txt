@@ -1,0 +1,14 @@
+Fast_M build error review - 2026-10-07
+========================================
+Reported CI errors:
+1) MainActivity.java: keyboardKey(...) not found (3 call sites).
+2) MouseAccessibilityService.java: AccessibilityNodeInfo.ACTION_SELECT_ALL not found.
+
+Repairs:
+- Ensured MainActivity has a class-level keyboardKey(String,int,int) helper.
+- Ensured no source reference remains to ACTION_SELECT_ALL; select-all behavior uses ACTION_SET_SELECTION with start=0/end=text length when needed.
+
+Validation:
+- ZIP integrity checked.
+- Java brace counts checked.
+- No Gradle wrapper is included in this project, so a local Gradle APK build was not performed in this environment.

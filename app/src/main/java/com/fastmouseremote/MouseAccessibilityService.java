@@ -223,21 +223,6 @@ public class MouseAccessibilityService extends AccessibilityService {
         });
     }
 
-    public void selectAllAndAction(int action) {
-        handler.post(() -> {
-            AccessibilityNodeInfo node = null;
-            try {
-                node = focusedInput();
-                if (node == null || !node.isEditable()) return;
-                node.performAction(AccessibilityNodeInfo.ACTION_SELECT_ALL);
-                node.performAction(action);
-            } catch (Exception ignored) {
-            } finally {
-                if (node != null) node.recycle();
-            }
-        });
-    }
-
     public void typeText(String value) {
         handler.post(() -> {
             AccessibilityNodeInfo node = null;
